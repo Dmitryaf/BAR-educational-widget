@@ -1,0 +1,15 @@
+{
+  "name": "bar-educational-widget",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Personal educational LuaUI widget for Beyond All Reason.",
+  "scripts": {
+    "prepare": "husky",
+    "commitlint": "commitlint"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^21.2.1",
+    "@commitlint/config-conventional": "^21.2.0",
+    "husky": "^9.1.7"
+  }
+}
