@@ -13,10 +13,16 @@ function widget:GetInfo()
 end
 
 local UPDATE_INTERVAL = 0.5
+local HISTORY_CAPACITY = 240
 local DEFAULT_X = 0.66
 local DEFAULT_Y = 0.70
 local DEFAULT_SCALE = 1.0
 local CONFIG_VERSION = 1
+
+local MODULE_ROOT = "LuaUI/Include/bar_learning_coach/"
+local HistoryBuffer = VFS.Include(MODULE_ROOT .. "history_buffer.lua")
+local EnergyStall = VFS.Include(MODULE_ROOT .. "energy_stall.lua")
+local SnapshotCollector = VFS.Include(MODULE_ROOT .. "snapshot_collector.lua")
 
 local panel = {
 	x = DEFAULT_X,
@@ -41,6 +47,13 @@ local snapshot = {
 
 local updateElapsed = UPDATE_INTERVAL
 local initialized = false
+local history = HistoryBuffer.new(HISTORY_CAPACITY)
+local energyStall = EnergyStall.new()
+local snapshotCollector = SnapshotCollector.new(history, energyStall)
+local energyDiagnostic = {
+	state = "unknown",
+	reason = "no snapshot yet",
+}
 
 local function logFirstError(name, detail)
 	if loggedErrors[name] then
@@ -158,6 +171,22 @@ local function fmtAge(seconds)
 	return string.format("%.1fs", math.max(0, seconds))
 end
 
+local function fmtRatio(value)
+	if type(value) ~= "number" then
+		return "unknown"
+	end
+
+	return string.format("%.1f%%", value * 100)
+end
+
+local function fmtSigned(value, suffix)
+	if type(value) ~= "number" then
+		return "unknown"
+	end
+
+	return string.format("%+.1f%s", value, suffix or "")
+end
+
 local function detectApi()
 	api.getGameFrame = Spring and Spring.GetGameFrame
 	api.getGameSeconds = Spring and Spring.GetGameSeconds
@@ -264,6 +293,7 @@ local function collectSnapshot()
 	if snapshot.teamID == nil then
 		snapshot.resources.metal = {}
 		snapshot.resources.energy = {}
+		energyDiagnostic = snapshotCollector:record(snapshot)
 		return
 	end
 
@@ -275,6 +305,8 @@ local function collectSnapshot()
 	then
 		snapshot.lastValidSnapshotTime = snapshot.gameTime
 	end
+
+	energyDiagnostic = snapshotCollector:record(snapshot)
 end
 
 local function append(lines, label, value)
@@ -336,6 +368,14 @@ local function buildLines()
 	lines[#lines + 1] = resourceFlowLine("Energy", snapshot.resources.energy)
 	append(lines, "Last snapshot", fmtTime(snapshot.lastSnapshotTime))
 	append(lines, "Valid snapshot age", fmtAge(validSnapshotAge()))
+	append(lines, "ENERGY_STALL state", tostring(energyDiagnostic.state or "unknown"))
+	append(lines, "  storage ratio", fmtRatio(energyDiagnostic.storageRatio))
+	append(lines, "  pull - income", fmtSigned(energyDiagnostic.deficit))
+	append(lines, "  storage trend", fmtSigned(energyDiagnostic.storageTrend, "/s"))
+	append(lines, "  state duration", fmtAge(energyDiagnostic.duration))
+	append(lines, "  cooldown remaining", fmtAge(energyDiagnostic.cooldownRemaining))
+	append(lines, "  history samples", tostring(history:size()))
+	append(lines, "  evidence", tostring(energyDiagnostic.reason or "condition tracked"))
 	append(lines, "Status", "available / succeeded / valid")
 
 	local names = {
@@ -419,6 +459,11 @@ end
 
 function widget:Shutdown()
 	initialized = false
+	snapshotCollector:reset()
+	energyDiagnostic = {
+		state = "unknown",
+		reason = "widget stopped",
+	}
 	api = {}
 	apiStatus = {}
 	loggedErrors = {}
