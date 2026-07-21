@@ -2,8 +2,8 @@ local widget = widget
 
 function widget:GetInfo()
 	return {
-		name = "BAR Learning Coach Debug",
-		desc = "Shows resource snapshot data for the BAR Learning Coach technical spike",
+		name = "BAR Learning Coach",
+		desc = "Explains sustained economy problems without playing for the user",
 		author = "Dmitry / Codex",
 		date = "2026-07-18",
 		license = "GNU GPL, v2 or later",
@@ -17,11 +17,12 @@ local HISTORY_CAPACITY = 240
 local DEFAULT_X = 0.66
 local DEFAULT_Y = 0.70
 local DEFAULT_SCALE = 1.0
-local CONFIG_VERSION = 1
+local CONFIG_VERSION = 2
 
 local MODULE_ROOT = "LuaUI/Include/bar_learning_coach/"
 local HistoryBuffer = VFS.Include(MODULE_ROOT .. "history_buffer.lua")
 local EnergyStall = VFS.Include(MODULE_ROOT .. "energy_stall.lua")
+local EnergyStallRecommendation = VFS.Include(MODULE_ROOT .. "energy_stall_recommendation.lua")
 local SnapshotCollector = VFS.Include(MODULE_ROOT .. "snapshot_collector.lua")
 
 local panel = {
@@ -29,6 +30,7 @@ local panel = {
 	y = DEFAULT_Y,
 	scale = DEFAULT_SCALE,
 }
+local debugPanelEnabled = false
 
 local api = {}
 local apiStatus = {}
@@ -54,6 +56,11 @@ local energyDiagnostic = {
 	state = "unknown",
 	reason = "no snapshot yet",
 }
+local activeRecommendation = nil
+
+local function updateRecommendation()
+	activeRecommendation = EnergyStallRecommendation.fromDiagnostic(energyDiagnostic)
+end
 
 local function logFirstError(name, detail)
 	if loggedErrors[name] then
@@ -294,6 +301,7 @@ local function collectSnapshot()
 		snapshot.resources.metal = {}
 		snapshot.resources.energy = {}
 		energyDiagnostic = snapshotCollector:record(snapshot)
+		updateRecommendation()
 		return
 	end
 
@@ -307,6 +315,7 @@ local function collectSnapshot()
 	end
 
 	energyDiagnostic = snapshotCollector:record(snapshot)
+	updateRecommendation()
 end
 
 local function append(lines, label, value)
@@ -373,9 +382,11 @@ local function buildLines()
 	append(lines, "  pull - income", fmtSigned(energyDiagnostic.deficit))
 	append(lines, "  storage trend", fmtSigned(energyDiagnostic.storageTrend, "/s"))
 	append(lines, "  state duration", fmtAge(energyDiagnostic.duration))
+	append(lines, "  episode duration", fmtAge(energyDiagnostic.episodeDuration))
 	append(lines, "  cooldown remaining", fmtAge(energyDiagnostic.cooldownRemaining))
 	append(lines, "  history samples", tostring(history:size()))
 	append(lines, "  evidence", tostring(energyDiagnostic.reason or "condition tracked"))
+	append(lines, "Active recommendation", activeRecommendation and activeRecommendation.id or "none")
 	append(lines, "Status", "available / succeeded / valid")
 
 	local names = {
@@ -451,6 +462,61 @@ local function drawPanel()
 	glColor(1, 1, 1, 1)
 end
 
+local function drawRecommendationCard()
+	if not initialized or activeRecommendation == nil then
+		return
+	end
+
+	local glColor = gl and gl.Color
+	local glRect = gl and gl.Rect
+	local glText = gl and gl.Text
+	if type(glColor) ~= "function" or type(glRect) ~= "function" or type(glText) ~= "function" then
+		return
+	end
+
+	local vsx, vsy = getViewGeometry()
+	local scale = panel.scale or DEFAULT_SCALE
+	local width = 480 * scale
+	local lineHeight = 19 * scale
+	local padding = 14 * scale
+	local lines = {
+		{ activeRecommendation.title, "title" },
+		{ activeRecommendation.fact, "fact" },
+		{ activeRecommendation.explanation, "detail" },
+		{ "Возможные действия:", "detail" },
+	}
+
+	for i = 1, #activeRecommendation.possibleActions do
+		lines[#lines + 1] = { "— " .. activeRecommendation.possibleActions[i], "action" }
+	end
+
+	local height = (#lines * lineHeight) + padding * 2
+	local x1 = math.max(0, vsx - width - 28 * scale)
+	local y1 = math.max(0, math.min(vsy - height, vsy * 0.16))
+	local x2 = x1 + width
+	local y2 = y1 + height
+	glColor(0.07, 0.08, 0.09, 0.94)
+	glRect(x1, y1, x2, y2)
+	glColor(0.95, 0.70, 0.20, 1.0)
+	glRect(x1, y2 - 3 * scale, x2, y2)
+
+	for i = 1, #lines do
+		local text = lines[i][1]
+		local kind = lines[i][2]
+		local y = y2 - padding - i * lineHeight
+		if kind == "title" then
+			glColor(1.00, 0.84, 0.48, 1.0)
+		elseif kind == "action" then
+			glColor(0.82, 0.88, 0.82, 1.0)
+		else
+			glColor(0.94, 0.94, 0.91, 1.0)
+		end
+		glText(text, x1 + padding, y, (kind == "title" and 15 or 13) * scale, "o")
+	end
+
+	glColor(1, 1, 1, 1)
+end
+
 function widget:Initialize()
 	detectApi()
 	initialized = true
@@ -464,6 +530,7 @@ function widget:Shutdown()
 		state = "unknown",
 		reason = "widget stopped",
 	}
+	activeRecommendation = nil
 	api = {}
 	apiStatus = {}
 	loggedErrors = {}
@@ -480,12 +547,16 @@ function widget:Update(dt)
 end
 
 function widget:DrawScreen()
-	drawPanel()
+	if debugPanelEnabled then
+		drawPanel()
+	end
+	drawRecommendationCard()
 end
 
 function widget:GetConfigData()
 	return {
 		version = CONFIG_VERSION,
+		debug = debugPanelEnabled,
 		panel = {
 			x = panel.x,
 			y = panel.y,
@@ -495,7 +566,15 @@ function widget:GetConfigData()
 end
 
 function widget:SetConfigData(data)
-	if type(data) ~= "table" or type(data.panel) ~= "table" then
+	if type(data) ~= "table" then
+		return
+	end
+
+	if type(data.debug) == "boolean" then
+		debugPanelEnabled = data.debug
+	end
+
+	if type(data.panel) ~= "table" then
 		return
 	end
 

@@ -73,6 +73,17 @@ describe("ENERGY_STALL diagnostic", function()
 		assert.are.equal("active", result.state)
 		assert.are.equal(0.03, result.storageRatio)
 		assert.are.equal(60, result.deficit)
+		assert.are.equal(15, result.episodeDuration)
+	end)
+
+	it("keeps episode duration while active and resolving", function()
+		local collector = createCollector()
+		collector:record(snapshot(2, 50, 1000, 140, 100))
+		local active = collector:record(snapshot(17, 30, 1000, 160, 100))
+		local resolving = collector:record(snapshot(20, 160, 1000, 105, 100))
+
+		assert.are.equal(15, active.episodeDuration)
+		assert.are.equal(18, resolving.episodeDuration)
 	end)
 
 	it("requires sustained recovery before resolving", function()

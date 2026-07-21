@@ -49,6 +49,7 @@ end
 
 dofile("tests/history_buffer_spec.lua")
 dofile("tests/energy_stall_spec.lua")
+dofile("tests/energy_stall_recommendation_spec.lua")
 
 print(string.format("%d successes / %d failures", successes, failures))
 if failures > 0 then

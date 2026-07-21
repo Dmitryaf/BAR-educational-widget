@@ -84,6 +84,7 @@ function EnergyStall.new(config)
 		config = copyConfig(config),
 		state = "inactive",
 		stateSince = nil,
+		episodeSince = nil,
 		cooldownUntil = nil,
 	}, EnergyStall)
 end
@@ -91,6 +92,7 @@ end
 function EnergyStall:resetLifecycle(clearCooldown)
 	self.state = "inactive"
 	self.stateSince = nil
+	self.episodeSince = nil
 	if clearCooldown then
 		self.cooldownUntil = nil
 	end
@@ -114,6 +116,7 @@ function EnergyStall:evaluate(snapshot, history)
 			deficit = nil,
 			storageTrend = nil,
 			duration = 0,
+			episodeDuration = 0,
 			cooldownRemaining = 0,
 		}
 	end
@@ -133,20 +136,24 @@ function EnergyStall:evaluate(snapshot, history)
 		reason = "cooldown active"
 	elseif self.state == "cooldown" or self.state == "resolved" then
 		self.cooldownUntil = nil
+		self.episodeSince = nil
 		self:setState("inactive", now)
 	end
 
 	if self.state ~= "cooldown" then
 		if self.state == "inactive" then
 			if enterCondition then
+				self.episodeSince = now
 				self:setState("candidate", now)
 			else
+				self.episodeSince = nil
 				reason = storageRatio > self.config.storageRatioEnter
 					and "storage ratio above enter threshold"
 					or "energy deficit below enter threshold"
 			end
 		elseif self.state == "candidate" then
 			if not enterCondition then
+				self.episodeSince = nil
 				self:setState("inactive", now)
 				reason = "candidate condition interrupted"
 			elseif now - self.stateSince >= self.config.candidateDuration then
@@ -168,6 +175,7 @@ function EnergyStall:evaluate(snapshot, history)
 	end
 
 	local duration = self.stateSince and math.max(0, now - self.stateSince) or 0
+	local episodeDuration = self.episodeSince and math.max(0, now - self.episodeSince) or 0
 	local cooldownRemaining = self.cooldownUntil and math.max(0, self.cooldownUntil - now) or 0
 
 	return {
@@ -177,6 +185,7 @@ function EnergyStall:evaluate(snapshot, history)
 		deficit = deficit,
 		storageTrend = storageTrend(history, now, self.config.trendWindow),
 		duration = duration,
+		episodeDuration = episodeDuration,
 		cooldownRemaining = cooldownRemaining,
 		enterCondition = enterCondition,
 		clearCondition = clearCondition,

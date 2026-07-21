@@ -15,6 +15,7 @@ end
 local MODULE_ROOT = "LuaUI/Include/bar_learning_coach/"
 local HistoryBuffer = VFS.Include(MODULE_ROOT .. "history_buffer.lua")
 local EnergyStall = VFS.Include(MODULE_ROOT .. "energy_stall.lua")
+local EnergyStallRecommendation = VFS.Include(MODULE_ROOT .. "energy_stall_recommendation.lua")
 local SnapshotCollector = VFS.Include(MODULE_ROOT .. "snapshot_collector.lua")
 
 local SAMPLE_INTERVAL = 5
@@ -88,6 +89,7 @@ local function collect()
 			energy = energy,
 		},
 	})
+	local recommendation = EnergyStallRecommendation.fromDiagnostic(result)
 
 	sampleCount = sampleCount + 1
 	Spring.Echo(table.concat({
@@ -103,7 +105,9 @@ local function collect()
 		"deficit=" .. value(result.deficit),
 		"trend=" .. value(result.storageTrend),
 		"duration=" .. value(result.duration),
+		"episode=" .. value(result.episodeDuration),
 		"cooldown=" .. value(result.cooldownRemaining),
+		"recommendation=" .. tostring(recommendation and recommendation.id or "none"),
 		"reason=" .. tostring(result.reason or "tracked"),
 	}, " "))
 end
