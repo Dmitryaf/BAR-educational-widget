@@ -14,6 +14,7 @@ end
 
 local UPDATE_INTERVAL = 0.5
 local BUILD_POWER_INTERVAL = 2.0
+local OPENING_INTERVAL = 2.0
 local HISTORY_CAPACITY = 240
 local DEFAULT_X = 0.66
 local DEFAULT_Y = 0.70
@@ -27,6 +28,10 @@ local EnergyStallRecommendation = VFS.Include(MODULE_ROOT .. "energy_stall_recom
 local SnapshotCollector = VFS.Include(MODULE_ROOT .. "snapshot_collector.lua")
 local BuildPowerAdapter = VFS.Include(MODULE_ROOT .. "build_power_adapter.lua")
 local BuildPowerSnapshot = VFS.Include(MODULE_ROOT .. "build_power_snapshot.lua")
+local OpeningContext = VFS.Include(MODULE_ROOT .. "opening_context.lua")
+local OpeningAdapter = VFS.Include(MODULE_ROOT .. "opening_adapter.lua")
+local OpeningTracker = VFS.Include(MODULE_ROOT .. "opening_tracker.lua")
+local OpeningProgress = VFS.Include(MODULE_ROOT .. "opening_progress.lua")
 
 local panel = {
 	x = DEFAULT_X,
@@ -56,8 +61,15 @@ local history = HistoryBuffer.new(HISTORY_CAPACITY)
 local energyStall = EnergyStall.new()
 local snapshotCollector = SnapshotCollector.new(history, energyStall)
 local buildPowerAdapter = BuildPowerAdapter.new(Spring, UnitDefs)
+local openingContext = OpeningContext.get()
+local openingAdapter = OpeningAdapter.new(Spring, UnitDefs, Game)
+local openingTracker = OpeningTracker.new(openingAdapter, openingContext)
 local lastBuildPowerCollectionTime = nil
+local lastOpeningCollectionTime = nil
+local openingDirty = true
 local buildPower = BuildPowerSnapshot.fromRaw(nil)
+local openingObservation = nil
+local openingProgress = nil
 local energyDiagnostic = {
 	state = "unknown",
 	reason = "no snapshot yet",
@@ -282,6 +294,23 @@ local function collectBuildPower(force)
 	lastBuildPowerCollectionTime = snapshot.gameTime
 end
 
+local function collectOpening(force)
+	if not force
+		and not openingDirty
+		and type(snapshot.gameTime) == "number"
+		and type(lastOpeningCollectionTime) == "number"
+		and snapshot.gameTime >= lastOpeningCollectionTime
+		and snapshot.gameTime - lastOpeningCollectionTime < OPENING_INTERVAL
+	then
+		return
+	end
+
+	openingObservation = openingTracker:observe(snapshot.teamID, snapshot.gameTime, energyDiagnostic.state)
+	openingProgress = OpeningProgress.evaluate(openingContext, openingObservation)
+	lastOpeningCollectionTime = snapshot.gameTime
+	openingDirty = false
+end
+
 local function collectSnapshot()
 	local teamID = safeCall("TeamID", api.getTeamID)
 	snapshot.teamID = type(teamID) == "number" and teamID or nil
@@ -322,6 +351,7 @@ local function collectSnapshot()
 		collectBuildPower(true)
 		energyDiagnostic = snapshotCollector:record(snapshot)
 		updateRecommendation()
+		collectOpening(true)
 		return
 	end
 
@@ -337,6 +367,7 @@ local function collectSnapshot()
 
 	energyDiagnostic = snapshotCollector:record(snapshot)
 	updateRecommendation()
+	collectOpening(false)
 end
 
 local function append(lines, label, value)
@@ -415,6 +446,25 @@ local function buildLines()
 	append(lines, "  construction targets", fmtInteger(#buildPower.targets))
 	append(lines, "  unknown units", fmtInteger(buildPower.unknownUnitCount))
 	append(lines, "  evidence", tostring(buildPower.reason))
+	append(lines, "Opening context", openingObservation and tostring(openingObservation.contextStatus) or "unknown")
+	append(lines, "  reason", openingObservation and tostring(openingObservation.reason) or "no observation")
+	append(lines, "  mex / wind / solar", openingObservation and (
+		fmtInteger(openingObservation.finishedCounts.cormex) .. " / "
+			.. fmtInteger(openingObservation.finishedCounts.corwin) .. " / "
+			.. fmtInteger(openingObservation.finishedCounts.corsolar)
+	) or "unknown / unknown / unknown")
+	append(lines, "  lab / constructor / combat", openingObservation and (
+		fmtInteger(openingObservation.finishedCounts.corlab) .. " / "
+			.. fmtInteger(openingObservation.finishedCounts.corck) .. " / "
+			.. fmtInteger(openingObservation.finishedCounts.combatBots)
+	) or "unknown / unknown / unknown")
+	append(lines, "  factory active / idle", openingObservation and (
+		fmtFlag(openingObservation.factory.active, "yes", "no") .. " / "
+			.. fmtAge(openingObservation.factory.idleDuration)
+	) or "- / unknown")
+	append(lines, "Opening lesson", openingProgress and tostring(openingProgress.lessonState) or "unknown")
+	append(lines, "  next milestone", openingProgress and tostring(openingProgress.nextMilestoneId or "none") or "none")
+	append(lines, "  presentation", openingProgress and tostring(openingProgress.presentation) or "none")
 	append(lines, "Status", "available / succeeded / valid")
 
 	local names = {
@@ -560,10 +610,52 @@ function widget:Shutdown()
 	}
 	activeRecommendation = nil
 	lastBuildPowerCollectionTime = nil
+	lastOpeningCollectionTime = nil
+	openingDirty = true
 	buildPower = BuildPowerSnapshot.fromRaw(nil)
+	openingTracker:reset()
+	openingObservation = nil
+	openingProgress = nil
 	api = {}
 	apiStatus = {}
 	loggedErrors = {}
+end
+
+local function isOwnFactory(unitDefID, firstTeamID, secondTeamID)
+	local ownTeamID = snapshot.teamID
+	if type(ownTeamID) ~= "number" or (firstTeamID ~= ownTeamID and secondTeamID ~= ownTeamID) then
+		return false
+	end
+	local unitDef = type(UnitDefs) == "table" and UnitDefs[unitDefID] or nil
+	return type(unitDef) == "table" and unitDef.name == openingContext.factoryUnitDefName
+end
+
+local function invalidateOpeningForFactory(unitDefID, firstTeamID, secondTeamID)
+	if not isOwnFactory(unitDefID, firstTeamID, secondTeamID) then
+		return
+	end
+	openingTracker:invalidate()
+	openingDirty = true
+end
+
+function widget:UnitCreated(_, unitDefID, unitTeam)
+	invalidateOpeningForFactory(unitDefID, unitTeam, nil)
+end
+
+function widget:UnitFinished(_, unitDefID, unitTeam)
+	invalidateOpeningForFactory(unitDefID, unitTeam, nil)
+end
+
+function widget:UnitDestroyed(_, unitDefID, unitTeam)
+	invalidateOpeningForFactory(unitDefID, unitTeam, nil)
+end
+
+function widget:UnitGiven(_, unitDefID, newTeam, oldTeam)
+	invalidateOpeningForFactory(unitDefID, newTeam, oldTeam)
+end
+
+function widget:UnitTaken(_, unitDefID, oldTeam, newTeam)
+	invalidateOpeningForFactory(unitDefID, oldTeam, newTeam)
 end
 
 function widget:Update(dt)

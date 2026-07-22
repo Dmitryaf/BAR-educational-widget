@@ -19,12 +19,19 @@ local EnergyStallRecommendation = VFS.Include(MODULE_ROOT .. "energy_stall_recom
 local SnapshotCollector = VFS.Include(MODULE_ROOT .. "snapshot_collector.lua")
 local BuildPowerAdapter = VFS.Include(MODULE_ROOT .. "build_power_adapter.lua")
 local BuildPowerSnapshot = VFS.Include(MODULE_ROOT .. "build_power_snapshot.lua")
+local OpeningContext = VFS.Include(MODULE_ROOT .. "opening_context.lua")
+local OpeningAdapter = VFS.Include(MODULE_ROOT .. "opening_adapter.lua")
+local OpeningTracker = VFS.Include(MODULE_ROOT .. "opening_tracker.lua")
+local OpeningProgress = VFS.Include(MODULE_ROOT .. "opening_progress.lua")
 
 local SAMPLE_INTERVAL = 5
 local history = HistoryBuffer.new(120)
 local detector = EnergyStall.new()
 local collector = SnapshotCollector.new(history, detector)
 local buildPowerAdapter = BuildPowerAdapter.new(Spring, UnitDefs)
+local openingContext = OpeningContext.get()
+local openingAdapter = OpeningAdapter.new(Spring, UnitDefs, Game)
+local openingTracker = OpeningTracker.new(openingAdapter, openingContext)
 local elapsed = SAMPLE_INTERVAL
 local sampleCount = 0
 
@@ -102,6 +109,8 @@ local function collect()
 	local recommendation = EnergyStallRecommendation.fromDiagnostic(result)
 	local buildPowerRaw = buildPowerAdapter:collect(currentTeamID)
 	local buildPower = BuildPowerSnapshot.fromRaw(buildPowerRaw)
+	local opening = openingTracker:observe(currentTeamID, gameTime, result.state)
+	local progress = OpeningProgress.evaluate(openingContext, opening)
 
 	sampleCount = sampleCount + 1
 	Spring.Echo(table.concat({
@@ -132,6 +141,72 @@ local function collect()
 		"buildPower.reason=" .. tostring(buildPower.reason),
 		"reason=" .. tostring(result.reason or "tracked"),
 	}, " "))
+
+	local milestoneFields = {}
+	for i = 1, #progress.milestones do
+		local milestone = progress.milestones[i]
+		milestoneFields[#milestoneFields + 1] = milestone.id .. ":" .. milestone.state
+	end
+	Spring.Echo(table.concat({
+		"[BAR Learning Coach Opening]",
+		"sample=" .. sampleCount,
+		"frame=" .. value(gameFrame),
+		"time=" .. value(gameTime),
+		"team=" .. value(currentTeamID),
+		"map=" .. field(opening.evidence and opening.evidence.mapName),
+		"context=" .. field(opening.contextId),
+		"contextStatus=" .. field(opening.contextStatus),
+		"contextReason=" .. field(opening.reason),
+		"commanders=" .. (#opening.evidence.commanderUnitDefNames > 0
+			and table.concat(opening.evidence.commanderUnitDefNames, ",") or "none"),
+		"units=" .. value(opening.evidence and opening.evidence.unitCount),
+		"unknownUnits=" .. value(opening.evidence and opening.evidence.unknownUnitCount),
+		"apiTeamUnits=" .. field(opening.evidence.api and opening.evidence.api.getTeamUnits),
+		"apiUnitDef=" .. field(opening.evidence.api and opening.evidence.api.getUnitDefID),
+		"apiBuildState=" .. field(opening.evidence.api and opening.evidence.api.getUnitIsBeingBuilt),
+		"apiWorkerTask=" .. field(opening.evidence.api and opening.evidence.api.getUnitWorkerTask),
+		"apiPosition=" .. field(opening.evidence.api and opening.evidence.api.getUnitPosition),
+		"apiUnitDefs=" .. field(opening.evidence.api and opening.evidence.api.unitDefs),
+		"cormex=" .. value(opening.finishedCounts.cormex),
+		"corwin=" .. value(opening.finishedCounts.corwin),
+		"corsolar=" .. value(opening.finishedCounts.corsolar),
+		"corlab=" .. value(opening.finishedCounts.corlab),
+		"corck=" .. value(opening.finishedCounts.corck),
+		"combatBots=" .. value(opening.finishedCounts.combatBots),
+		"expansionMex=" .. value(opening.finishedCounts.expansionMex),
+		"factoryActive=" .. field(opening.factory.active),
+		"factoryIdle=" .. value(opening.factory.idleDuration),
+		"recovery=" .. field(opening.recovery.energyState),
+		"lesson=" .. field(progress.lessonState),
+		"next=" .. field(progress.nextMilestoneId),
+		"presentation=" .. field(progress.presentation),
+		"milestones=" .. (#milestoneFields > 0 and table.concat(milestoneFields, ",") or "none"),
+	}, " "))
+
+	for i = 1, #progress.milestones do
+		local milestone = progress.milestones[i]
+		Spring.Echo(table.concat({
+			"[BAR Learning Coach OpeningMilestone]",
+			"sample=" .. sampleCount,
+			"id=" .. field(milestone.id),
+			"state=" .. field(milestone.state),
+			"progressState=" .. field(milestone.progressState),
+			"reason=" .. field(milestone.reason),
+		}, " "))
+	end
+
+	local mexPositions = opening.evidence and opening.evidence.finishedMexPositions or {}
+	for i = 1, #mexPositions do
+		local mex = mexPositions[i]
+		Spring.Echo(table.concat({
+			"[BAR Learning Coach OpeningMex]",
+			"sample=" .. sampleCount,
+			"unit=" .. field(mex.unitID),
+			"positionKnown=" .. field(mex.positionKnown),
+			"x=" .. value(mex.x),
+			"z=" .. value(mex.z),
+		}, " "))
+	end
 
 	for i = 1, #buildPowerRaw.units do
 		local unit = buildPowerRaw.units[i]

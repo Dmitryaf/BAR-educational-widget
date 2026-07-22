@@ -94,6 +94,7 @@ function widget:Initialize()
 	harness.run(SPEC_ROOT .. "opening_context_spec.lua")
 	harness.run(SPEC_ROOT .. "opening_progress_spec.lua")
 	harness.run(SPEC_ROOT .. "opening_adapter_spec.lua")
+	harness.run(SPEC_ROOT .. "opening_tracker_spec.lua")
 
 	local successes, failures = harness.result()
 	echo(string.format("%d successes / %d failures", successes, failures))
