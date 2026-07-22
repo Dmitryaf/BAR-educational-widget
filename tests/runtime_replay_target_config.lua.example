@@ -1,0 +1,7 @@
+-- Copy temporarily to LuaUI/Config/bar_learning_coach_replay_target.lua.
+-- Remove the installed copy after replay collection.
+return {
+	targetTeamID = 0,
+	maxGameTime = 480,
+	autoUnpause = true,
+}

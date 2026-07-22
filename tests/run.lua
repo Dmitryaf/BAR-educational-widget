@@ -56,6 +56,7 @@ dofile("tests/opening_context_spec.lua")
 dofile("tests/opening_progress_spec.lua")
 dofile("tests/opening_adapter_spec.lua")
 dofile("tests/opening_tracker_spec.lua")
+dofile("tests/replay_opening_collector_spec.lua")
 
 print(string.format("%d successes / %d failures", successes, failures))
 if failures > 0 then
