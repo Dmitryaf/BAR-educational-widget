@@ -10,7 +10,9 @@ describe("opening context", function()
 		assert.is_nil(reason)
 		assert.are.equal("cortex_bot_ravaged_1v1_practice", context.id)
 		assert.are.equal("Ravaged Remake v1.2", context.mapName)
+		assert.are.equal("corcom", context.commanderUnitDefName)
 		assert.are.equal("corlab", context.factoryUnitDefName)
+		assert.are.equal("corak", context.countGroups.combatBots[1])
 	end)
 
 	it("returns nil for an unsupported context", function()
@@ -20,11 +22,11 @@ describe("opening context", function()
 	it("returns an independent copy", function()
 		local first = OpeningContext.get()
 		first.thresholds.baseMex = 99
-		first.unitDefNames.combatBots[1] = "changed"
+		first.countGroups.combatBots[1] = "changed"
 
 		local second = OpeningContext.get()
 		assert.are.equal(2, second.thresholds.baseMex)
-		assert.are.equal("corak", second.unitDefNames.combatBots[1])
+		assert.are.equal("corak", second.countGroups.combatBots[1])
 	end)
 
 	it("rejects an invalid threshold", function()
@@ -36,13 +38,31 @@ describe("opening context", function()
 		assert.are.equal("context threshold initialCombatBots invalid", reason)
 	end)
 
-	it("rejects a missing unit group", function()
+	it("rejects a missing commander definition", function()
 		local context = OpeningContext.get()
-		context.unitDefNames.combatBots = {}
+		context.commanderUnitDefName = ""
 
 		local valid, reason = OpeningContext.validate(context)
 		assert.are.equal(false, valid)
-		assert.are.equal("context unitDefNames combatBots invalid", reason)
+		assert.are.equal("context commanderUnitDefName missing", reason)
+	end)
+
+	it("rejects a missing count group", function()
+		local context = OpeningContext.get()
+		context.countGroups.corlab = nil
+
+		local valid, reason = OpeningContext.validate(context)
+		assert.are.equal(false, valid)
+		assert.are.equal("context countGroups corlab invalid", reason)
+	end)
+
+	it("rejects a factory count group mismatch", function()
+		local context = OpeningContext.get()
+		context.countGroups.corlab = { "another_factory" }
+
+		local valid, reason = OpeningContext.validate(context)
+		assert.are.equal(false, valid)
+		assert.are.equal("context factory count group mismatch", reason)
 	end)
 
 	it("keeps the stable context id explicit", function()

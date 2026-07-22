@@ -7,11 +7,14 @@ local CONTEXT = {
 	mapName = "Ravaged Remake v1.2",
 	mode = "local_1v1_practice",
 	faction = "Cortex",
+	commanderUnitDefName = "corcom",
 	factoryUnitDefName = "corlab",
-	unitDefNames = {
-		mex = { "cormex" },
-		energy = { "corwin", "corsolar" },
-		constructors = { "corck" },
+	countGroups = {
+		cormex = { "cormex" },
+		corwin = { "corwin" },
+		corsolar = { "corsolar" },
+		corlab = { "corlab" },
+		corck = { "corck" },
 		combatBots = { "corak", "corstorm", "corthud", "corcrash" },
 	},
 	thresholds = {
@@ -88,7 +91,14 @@ function OpeningContext.validate(context)
 		return false, "context missing"
 	end
 
-	local requiredStrings = { "id", "mapName", "mode", "faction", "factoryUnitDefName" }
+	local requiredStrings = {
+		"id",
+		"mapName",
+		"mode",
+		"faction",
+		"commanderUnitDefName",
+		"factoryUnitDefName",
+	}
 	for i = 1, #requiredStrings do
 		local field = requiredStrings[i]
 		if type(context[field]) ~= "string" or context[field] == "" then
@@ -96,15 +106,18 @@ function OpeningContext.validate(context)
 		end
 	end
 
-	if type(context.unitDefNames) ~= "table" then
-		return false, "context unitDefNames missing"
+	if type(context.countGroups) ~= "table" then
+		return false, "context countGroups missing"
 	end
-	local requiredUnitGroups = { "mex", "energy", "constructors", "combatBots" }
-	for i = 1, #requiredUnitGroups do
-		local group = requiredUnitGroups[i]
-		if not nonEmptyStringArray(context.unitDefNames[group]) then
-			return false, "context unitDefNames " .. group .. " invalid"
+	local requiredCountGroups = { "cormex", "corwin", "corsolar", "corlab", "corck", "combatBots" }
+	for i = 1, #requiredCountGroups do
+		local group = requiredCountGroups[i]
+		if not nonEmptyStringArray(context.countGroups[group]) then
+			return false, "context countGroups " .. group .. " invalid"
 		end
+	end
+	if #context.countGroups.corlab ~= 1 or context.countGroups.corlab[1] ~= context.factoryUnitDefName then
+		return false, "context factory count group mismatch"
 	end
 	if type(context.thresholds) ~= "table" then
 		return false, "context thresholds missing"
