@@ -52,6 +52,8 @@ dofile("tests/energy_stall_spec.lua")
 dofile("tests/energy_stall_recommendation_spec.lua")
 dofile("tests/build_power_adapter_spec.lua")
 dofile("tests/build_power_snapshot_spec.lua")
+dofile("tests/opening_context_spec.lua")
+dofile("tests/opening_progress_spec.lua")
 
 print(string.format("%d successes / %d failures", successes, failures))
 if failures > 0 then
