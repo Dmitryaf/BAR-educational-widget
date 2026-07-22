@@ -13,6 +13,7 @@ function widget:GetInfo()
 end
 
 local UPDATE_INTERVAL = 0.5
+local BUILD_POWER_INTERVAL = 2.0
 local HISTORY_CAPACITY = 240
 local DEFAULT_X = 0.66
 local DEFAULT_Y = 0.70
@@ -24,6 +25,8 @@ local HistoryBuffer = VFS.Include(MODULE_ROOT .. "history_buffer.lua")
 local EnergyStall = VFS.Include(MODULE_ROOT .. "energy_stall.lua")
 local EnergyStallRecommendation = VFS.Include(MODULE_ROOT .. "energy_stall_recommendation.lua")
 local SnapshotCollector = VFS.Include(MODULE_ROOT .. "snapshot_collector.lua")
+local BuildPowerAdapter = VFS.Include(MODULE_ROOT .. "build_power_adapter.lua")
+local BuildPowerSnapshot = VFS.Include(MODULE_ROOT .. "build_power_snapshot.lua")
 
 local panel = {
 	x = DEFAULT_X,
@@ -52,6 +55,9 @@ local initialized = false
 local history = HistoryBuffer.new(HISTORY_CAPACITY)
 local energyStall = EnergyStall.new()
 local snapshotCollector = SnapshotCollector.new(history, energyStall)
+local buildPowerAdapter = BuildPowerAdapter.new(Spring, UnitDefs)
+local lastBuildPowerCollectionTime = nil
+local buildPower = BuildPowerSnapshot.fromRaw(nil)
 local energyDiagnostic = {
 	state = "unknown",
 	reason = "no snapshot yet",
@@ -263,6 +269,19 @@ local function readResource(resourceName)
 	return data
 end
 
+local function collectBuildPower(force)
+	if not force
+		and type(snapshot.gameTime) == "number"
+		and type(lastBuildPowerCollectionTime) == "number"
+		and snapshot.gameTime - lastBuildPowerCollectionTime < BUILD_POWER_INTERVAL
+	then
+		return
+	end
+
+	buildPower = BuildPowerSnapshot.fromRaw(buildPowerAdapter:collect(snapshot.teamID))
+	lastBuildPowerCollectionTime = snapshot.gameTime
+end
+
 local function collectSnapshot()
 	local teamID = safeCall("TeamID", api.getTeamID)
 	snapshot.teamID = type(teamID) == "number" and teamID or nil
@@ -300,6 +319,7 @@ local function collectSnapshot()
 	if snapshot.teamID == nil then
 		snapshot.resources.metal = {}
 		snapshot.resources.energy = {}
+		collectBuildPower(true)
 		energyDiagnostic = snapshotCollector:record(snapshot)
 		updateRecommendation()
 		return
@@ -307,6 +327,7 @@ local function collectSnapshot()
 
 	snapshot.resources.metal = readResource("metal")
 	snapshot.resources.energy = readResource("energy")
+	collectBuildPower(false)
 	if snapshot.gameTime ~= nil
 		and isResourceDataValid(snapshot.resources.metal)
 		and isResourceDataValid(snapshot.resources.energy)
@@ -387,6 +408,13 @@ local function buildLines()
 	append(lines, "  history samples", tostring(history:size()))
 	append(lines, "  evidence", tostring(energyDiagnostic.reason or "condition tracked"))
 	append(lines, "Active recommendation", activeRecommendation and activeRecommendation.id or "none")
+	append(lines, "Build power status", tostring(buildPower.status))
+	append(lines, "  total / active", fmtNumber(buildPower.totalBuildPower) .. " / " .. fmtNumber(buildPower.activeBuildPower))
+	append(lines, "  known builders", fmtInteger(buildPower.knownBuilderCount))
+	append(lines, "  active / inactive", fmtInteger(buildPower.activeBuilderCount) .. " / " .. fmtInteger(buildPower.inactiveBuilderCount))
+	append(lines, "  construction targets", fmtInteger(#buildPower.targets))
+	append(lines, "  unknown units", fmtInteger(buildPower.unknownUnitCount))
+	append(lines, "  evidence", tostring(buildPower.reason))
 	append(lines, "Status", "available / succeeded / valid")
 
 	local names = {
@@ -531,6 +559,8 @@ function widget:Shutdown()
 		reason = "widget stopped",
 	}
 	activeRecommendation = nil
+	lastBuildPowerCollectionTime = nil
+	buildPower = BuildPowerSnapshot.fromRaw(nil)
 	api = {}
 	apiStatus = {}
 	loggedErrors = {}

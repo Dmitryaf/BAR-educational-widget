@@ -89,6 +89,8 @@ function widget:Initialize()
 	harness.run(SPEC_ROOT .. "history_buffer_spec.lua")
 	harness.run(SPEC_ROOT .. "energy_stall_spec.lua")
 	harness.run(SPEC_ROOT .. "energy_stall_recommendation_spec.lua")
+	harness.run(SPEC_ROOT .. "build_power_adapter_spec.lua")
+	harness.run(SPEC_ROOT .. "build_power_snapshot_spec.lua")
 
 	local successes, failures = harness.result()
 	echo(string.format("%d successes / %d failures", successes, failures))

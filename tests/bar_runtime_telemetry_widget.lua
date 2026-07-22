@@ -17,11 +17,14 @@ local HistoryBuffer = VFS.Include(MODULE_ROOT .. "history_buffer.lua")
 local EnergyStall = VFS.Include(MODULE_ROOT .. "energy_stall.lua")
 local EnergyStallRecommendation = VFS.Include(MODULE_ROOT .. "energy_stall_recommendation.lua")
 local SnapshotCollector = VFS.Include(MODULE_ROOT .. "snapshot_collector.lua")
+local BuildPowerAdapter = VFS.Include(MODULE_ROOT .. "build_power_adapter.lua")
+local BuildPowerSnapshot = VFS.Include(MODULE_ROOT .. "build_power_snapshot.lua")
 
 local SAMPLE_INTERVAL = 5
 local history = HistoryBuffer.new(120)
 local detector = EnergyStall.new()
 local collector = SnapshotCollector.new(history, detector)
+local buildPowerAdapter = BuildPowerAdapter.new(Spring, UnitDefs)
 local elapsed = SAMPLE_INTERVAL
 local sampleCount = 0
 
@@ -30,6 +33,13 @@ local function value(valueToFormat)
 		return "unknown"
 	end
 	return string.format("%.3f", valueToFormat)
+end
+
+local function field(valueToFormat)
+	if valueToFormat == nil then
+		return "unknown"
+	end
+	return tostring(valueToFormat)
 end
 
 local function readResource(teamID, resourceName)
@@ -90,6 +100,8 @@ local function collect()
 		},
 	})
 	local recommendation = EnergyStallRecommendation.fromDiagnostic(result)
+	local buildPowerRaw = buildPowerAdapter:collect(currentTeamID)
+	local buildPower = BuildPowerSnapshot.fromRaw(buildPowerRaw)
 
 	sampleCount = sampleCount + 1
 	Spring.Echo(table.concat({
@@ -108,8 +120,53 @@ local function collect()
 		"episode=" .. value(result.episodeDuration),
 		"cooldown=" .. value(result.cooldownRemaining),
 		"recommendation=" .. tostring(recommendation and recommendation.id or "none"),
+		"buildPower.status=" .. tostring(buildPower.status),
+		"buildPower.units=" .. value(buildPower.unitCount),
+		"buildPower.builders=" .. value(buildPower.knownBuilderCount),
+		"buildPower.total=" .. value(buildPower.totalBuildPower),
+		"buildPower.active=" .. value(buildPower.activeBuildPower),
+		"buildPower.activeBuilders=" .. value(buildPower.activeBuilderCount),
+		"buildPower.inactiveBuilders=" .. value(buildPower.inactiveBuilderCount),
+		"buildPower.targets=" .. value(#buildPower.targets),
+		"buildPower.unknownUnits=" .. value(buildPower.unknownUnitCount),
+		"buildPower.reason=" .. tostring(buildPower.reason),
 		"reason=" .. tostring(result.reason or "tracked"),
 	}, " "))
+
+	for i = 1, #buildPowerRaw.units do
+		local unit = buildPowerRaw.units[i]
+		if unit.isBuilder == true or unit.definitionKnown ~= true then
+			Spring.Echo(table.concat({
+				"[BAR Learning Coach BuildPowerUnit]",
+				"sample=" .. sampleCount,
+				"unit=" .. field(unit.unitID),
+				"def=" .. field(unit.unitDefID),
+				"definitionKnown=" .. field(unit.definitionKnown),
+				"builder=" .. field(unit.isBuilder),
+				"factory=" .. field(unit.isFactory),
+				"buildSpeed=" .. value(unit.buildSpeed),
+				"stateKnown=" .. field(unit.stateKnown),
+				"beingBuilt=" .. field(unit.beingBuilt),
+				"stunned=" .. field(unit.stunned),
+				"taskKnown=" .. field(unit.taskKnown),
+				"command=" .. value(unit.taskCommandID),
+				"target=" .. value(unit.taskTargetID),
+				"nanoActivity=" .. value(unit.nanoActivity),
+			}, " "))
+		end
+	end
+
+	for i = 1, #buildPower.targets do
+		local target = buildPower.targets[i]
+		Spring.Echo(table.concat({
+			"[BAR Learning Coach BuildPowerTarget]",
+			"sample=" .. sampleCount,
+			"target=" .. value(target.targetID),
+			"active=" .. value(target.activeBuildPower),
+			"contributors=" .. value(target.contributors),
+			"factories=" .. value(target.factoryContributors),
+		}, " "))
+	end
 end
 
 function widget:Initialize()
