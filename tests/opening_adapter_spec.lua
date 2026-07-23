@@ -64,6 +64,14 @@ local function fakeSpring(config)
 		end
 	end
 
+	if config.startPositionAvailable ~= false then
+		function spring.GetTeamStartPosition(teamID)
+			config.requestedStartTeamID = teamID
+			local position = config.startPosition or { 0, 0, 0, true }
+			return position[1], position[2], position[3], position[4]
+		end
+	end
+
 	return spring
 end
 
@@ -123,10 +131,13 @@ describe("opening adapter", function()
 		assert.are.equal(1, observation.finishedCounts.corlab)
 		assert.are.equal(1, observation.finishedCounts.corck)
 		assert.are.equal(2, observation.finishedCounts.combatBots)
-		assert.is_nil(observation.finishedCounts.expansionMex)
+		assert.are.equal(0, observation.finishedCounts.expansionMex)
 		assert.are.equal(true, observation.factory.active)
+		assert.are.equal(7, config.requestedStartTeamID)
+		assert.are.equal(true, observation.evidence.startPosition.known)
 		assert.are.equal(1, #observation.evidence.finishedMexPositions)
 		assert.are.equal(true, observation.evidence.finishedMexPositions[1].positionKnown)
+		assert.are.equal(false, observation.evidence.finishedMexPositions[1].outsideStartRadius)
 	end)
 
 	it("rejects a different map before reading team units", function()
@@ -184,6 +195,7 @@ describe("opening adapter", function()
 		assert.are.equal(1, observation.evidence.unknownUnitCount)
 		assert.is_nil(observation.finishedCounts.cormex)
 		assert.is_nil(observation.finishedCounts.corlab)
+		assert.is_nil(observation.finishedCounts.expansionMex)
 	end)
 
 	it("limits an unknown build state to its count group", function()
@@ -195,6 +207,7 @@ describe("opening adapter", function()
 
 		assert.are.equal("supported", observation.contextStatus)
 		assert.is_nil(observation.finishedCounts.cormex)
+		assert.is_nil(observation.finishedCounts.expansionMex)
 		assert.are.equal(1, observation.finishedCounts.corwin)
 		assert.are.equal(0, observation.finishedCounts.combatBots)
 	end)
@@ -247,6 +260,68 @@ describe("opening adapter", function()
 		assert.is_nil(observation.finishedCounts.expansionMex)
 	end)
 
+	it("counts only a finished mex outside the configured start radius", function()
+		local observation = collect({
+			unitIDs = { 101, 102, 103 },
+			defByUnit = { [101] = 1, [102] = 2, [103] = 2 },
+			beingBuiltByUnit = { [102] = false, [103] = false },
+			startPosition = { 800, 0, 4096, true },
+			positionByUnit = {
+				[102] = { 944, 5, 4000 },
+				[103] = { 1824, 5, 4560 },
+			},
+		})
+
+		assert.are.equal(2, observation.finishedCounts.cormex)
+		assert.are.equal(1, observation.finishedCounts.expansionMex)
+		assert.are.equal(800, observation.evidence.startPosition.x)
+		assert.are.equal(4096, observation.evidence.startPosition.z)
+		assert.are.equal(false, observation.evidence.finishedMexPositions[1].outsideStartRadius)
+		assert.are.equal(true, observation.evidence.finishedMexPositions[2].outsideStartRadius)
+		assert(observation.evidence.finishedMexPositions[2].distanceFromStart > 900)
+	end)
+
+	it("keeps a mex exactly on the radius boundary inside the start zone", function()
+		local observation = collect({
+			unitIDs = { 101, 102 },
+			defByUnit = { [101] = 1, [102] = 2 },
+			beingBuiltByUnit = { [102] = false },
+			startPosition = { 0, 0, 0, true },
+			positionByUnit = { [102] = { 900, 5, 0 } },
+		})
+
+		assert.are.equal(0, observation.finishedCounts.expansionMex)
+		assert.are.equal(false, observation.evidence.finishedMexPositions[1].outsideStartRadius)
+		assert.are.equal(900, observation.evidence.finishedMexPositions[1].distanceFromStart)
+	end)
+
+	it("keeps expansion unknown when start position API is missing", function()
+		local observation = collect({
+			unitIDs = { 101, 102 },
+			defByUnit = { [101] = 1, [102] = 2 },
+			beingBuiltByUnit = { [102] = false },
+			positionByUnit = { [102] = { 1800, 5, 4500 } },
+			startPositionAvailable = false,
+		})
+
+		assert.are.equal(false, observation.evidence.api.getTeamStartPosition)
+		assert.are.equal(false, observation.evidence.startPosition.known)
+		assert.is_nil(observation.finishedCounts.expansionMex)
+	end)
+
+	it("keeps expansion unknown when the engine marks start position invalid", function()
+		local observation = collect({
+			unitIDs = { 101, 102 },
+			defByUnit = { [101] = 1, [102] = 2 },
+			beingBuiltByUnit = { [102] = false },
+			positionByUnit = { [102] = { 1800, 5, 4500 } },
+			startPosition = { 800, 0, 4096, false },
+		})
+
+		assert.are.equal(false, observation.evidence.startPosition.known)
+		assert.is_nil(observation.finishedCounts.expansionMex)
+	end)
+
 	it("keeps all counts unknown when team unit API is missing", function()
 		local observation = collect({ teamUnitsAvailable = false })
 
@@ -294,5 +369,49 @@ describe("opening adapter", function()
 		assert.are.equal("complete", evaluated.milestones[3].state)
 		assert.are.equal("first_expansion", evaluated.nextMilestoneId)
 		assert.are.equal("unknown", evaluated.lessonState)
+	end)
+
+	it("feeds a confirmed outside mex into the expansion milestone", function()
+		local observation = collect({
+			unitIDs = { 101, 102, 103, 111, 104, 105, 106, 107, 108, 110 },
+			defByUnit = {
+				[101] = 1,
+				[102] = 2,
+				[103] = 2,
+				[111] = 2,
+				[104] = 3,
+				[105] = 5,
+				[106] = 6,
+				[107] = 7,
+				[108] = 7,
+				[110] = 8,
+			},
+			beingBuiltByUnit = {
+				[102] = false,
+				[103] = false,
+				[111] = false,
+				[104] = false,
+				[105] = false,
+				[106] = false,
+				[107] = false,
+				[108] = false,
+				[110] = false,
+			},
+			startPosition = { 800, 0, 4096, true },
+			positionByUnit = {
+				[102] = { 944, 5, 4000 },
+				[103] = { 624, 5, 4352 },
+				[111] = { 1824, 5, 4560 },
+			},
+			taskByUnit = { [105] = { -7, 700 } },
+		})
+
+		observation.recovery.energyState = "inactive"
+		local evaluated = OpeningProgress.evaluate(context, observation)
+
+		assert.are.equal(1, observation.finishedCounts.expansionMex)
+		assert.are.equal("complete", evaluated.milestones[4].state)
+		assert.are.equal("t1_loop", evaluated.nextMilestoneId)
+		assert.are.equal("milestone", evaluated.presentation)
 	end)
 end)

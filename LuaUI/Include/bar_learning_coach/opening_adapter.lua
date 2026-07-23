@@ -12,14 +12,14 @@ end
 
 local function call(fn, ...)
 	if type(fn) ~= "function" then
-		return false, nil, nil, nil
+		return false, nil, nil, nil, nil
 	end
 
-	local ok, a, b, c = pcall(fn, ...)
+	local ok, a, b, c, d = pcall(fn, ...)
 	if not ok then
-		return false, nil, nil, nil
+		return false, nil, nil, nil, nil
 	end
-	return true, a, b, c
+	return true, a, b, c, d
 end
 
 local function emptyCounts()
@@ -54,6 +54,11 @@ local function emptyObservation(context, gameTime, mapName)
 			unknownUnitCount = nil,
 			commanderUnitDefNames = {},
 			finishedMexPositions = {},
+			startPosition = {
+				known = false,
+				x = nil,
+				z = nil,
+			},
 		},
 	}
 end
@@ -65,6 +70,9 @@ local function validContext(context)
 		or type(context.commanderUnitDefName) ~= "string"
 		or type(context.factoryUnitDefName) ~= "string"
 		or type(context.countGroups) ~= "table"
+		or type(context.thresholds) ~= "table"
+		or not finiteNumber(context.thresholds.expansionRadius)
+		or context.thresholds.expansionRadius <= 0
 	then
 		return false
 	end
@@ -136,6 +144,7 @@ function OpeningAdapter:collect(teamID, context, gameTime)
 		getUnitIsBeingBuilt = type(self.spring.GetUnitIsBeingBuilt) == "function",
 		getUnitWorkerTask = type(self.spring.GetUnitWorkerTask) == "function",
 		getUnitPosition = type(self.spring.GetUnitPosition) == "function",
+		getTeamStartPosition = type(self.spring.GetTeamStartPosition) == "function",
 		unitDefs = type(self.unitDefs) == "table",
 	}
 	if not validContext(context) then
@@ -165,6 +174,14 @@ function OpeningAdapter:collect(teamID, context, gameTime)
 
 	observation.evidence.unitCount = #unitIDs
 	observation.evidence.unknownUnitCount = 0
+	local startOk, startX, _, startZ, startValid = call(self.spring.GetTeamStartPosition, teamID)
+	local startPositionKnown = startOk
+		and startValid == true
+		and finiteNumber(startX)
+		and finiteNumber(startZ)
+	observation.evidence.startPosition.known = startPositionKnown
+	observation.evidence.startPosition.x = startPositionKnown and startX or nil
+	observation.evidence.startPosition.z = startPositionKnown and startZ or nil
 	local groupIndex = buildGroupIndex(context)
 	local counts = {}
 	local countKnown = {}
@@ -178,6 +195,8 @@ function OpeningAdapter:collect(teamID, context, gameTime)
 	local foreignCommanderFound = false
 	local factoryTaskUnknown = false
 	local factoryActive = false
+	local expansionKnown = startPositionKnown
+	local expansionMex = 0
 
 	for i = 1, #unitIDs do
 		local unitID = unitIDs[i]
@@ -217,12 +236,30 @@ function OpeningAdapter:collect(teamID, context, gameTime)
 
 					if contains(groups, "cormex") then
 						local positionOk, x, _, z = call(self.spring.GetUnitPosition, unitID)
+						local positionKnown = positionOk and finiteNumber(x) and finiteNumber(z)
+						local distanceFromStart = nil
+						local outsideStartRadius = nil
+						if positionKnown and startPositionKnown then
+							local dx = x - startX
+							local dz = z - startZ
+							distanceFromStart = math.sqrt(dx * dx + dz * dz)
+							outsideStartRadius = distanceFromStart > context.thresholds.expansionRadius
+						end
 						observation.evidence.finishedMexPositions[#observation.evidence.finishedMexPositions + 1] = {
 							unitID = unitID,
-							positionKnown = positionOk and finiteNumber(x) and finiteNumber(z),
-							x = positionOk and finiteNumber(x) and x or nil,
-							z = positionOk and finiteNumber(z) and z or nil,
+							positionKnown = positionKnown,
+							x = positionKnown and x or nil,
+							z = positionKnown and z or nil,
+							distanceFromStart = distanceFromStart,
+							outsideStartRadius = outsideStartRadius,
 						}
+						if not positionKnown then
+							expansionKnown = false
+						elseif expansionKnown then
+							if outsideStartRadius then
+								expansionMex = expansionMex + 1
+							end
+						end
 					end
 
 					if unitDefName == context.factoryUnitDefName then
@@ -248,12 +285,16 @@ function OpeningAdapter:collect(teamID, context, gameTime)
 		for i = 1, #COUNT_FIELDS do
 			countKnown[COUNT_FIELDS[i]] = false
 		end
+		expansionKnown = false
 	end
 	for i = 1, #COUNT_FIELDS do
 		local field = COUNT_FIELDS[i]
 		observation.finishedCounts[field] = countKnown[field] and counts[field] or nil
 	end
-	observation.finishedCounts.expansionMex = nil
+	if not countKnown.cormex then
+		expansionKnown = false
+	end
+	observation.finishedCounts.expansionMex = expansionKnown and expansionMex or nil
 
 	if observation.finishedCounts.corlab == 0 then
 		observation.factory.active = false
