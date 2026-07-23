@@ -22,6 +22,7 @@ local CONTEXT = {
 		baseEnergy = 1,
 		initialCombatBots = 3,
 		expansionMex = 1,
+		expansionRadius = 900,
 		stableCombatBots = 5,
 		factoryIdleLimit = 15,
 	},
@@ -131,6 +132,7 @@ function OpeningContext.validate(context)
 		"baseEnergy",
 		"initialCombatBots",
 		"expansionMex",
+		"expansionRadius",
 		"stableCombatBots",
 		"factoryIdleLimit",
 	}

@@ -173,6 +173,7 @@ local function validContext(context)
 		"baseEnergy",
 		"initialCombatBots",
 		"expansionMex",
+		"expansionRadius",
 		"stableCombatBots",
 		"factoryIdleLimit",
 	}

@@ -13,6 +13,7 @@ describe("opening context", function()
 		assert.are.equal("corcom", context.commanderUnitDefName)
 		assert.are.equal("corlab", context.factoryUnitDefName)
 		assert.are.equal(3, context.thresholds.baseMex)
+		assert.are.equal(900, context.thresholds.expansionRadius)
 		assert.are.equal("Закончи три mex и добавь раннюю генерацию энергии.", context.milestones[1].action)
 		assert.are.equal("corak", context.countGroups.combatBots[1])
 	end)
@@ -38,6 +39,15 @@ describe("opening context", function()
 		local valid, reason = OpeningContext.validate(context)
 		assert.are.equal(false, valid)
 		assert.are.equal("context threshold initialCombatBots invalid", reason)
+	end)
+
+	it("rejects an invalid expansion radius", function()
+		local context = OpeningContext.get()
+		context.thresholds.expansionRadius = 0
+
+		local valid, reason = OpeningContext.validate(context)
+		assert.are.equal(false, valid)
+		assert.are.equal("context threshold expansionRadius invalid", reason)
 	end)
 
 	it("rejects a missing commander definition", function()
