@@ -259,7 +259,7 @@ describe("opening adapter", function()
 
 	it("feeds confirmed early milestones into opening progress", function()
 		local observation = collect({
-			unitIDs = { 101, 102, 103, 104, 105, 106, 107, 108, 110 },
+			unitIDs = { 101, 102, 103, 104, 105, 106, 107, 108, 110, 111 },
 			defByUnit = {
 				[101] = 1,
 				[102] = 2,
@@ -270,6 +270,7 @@ describe("opening adapter", function()
 				[107] = 7,
 				[108] = 7,
 				[110] = 8,
+				[111] = 2,
 			},
 			beingBuiltByUnit = {
 				[102] = false,
@@ -280,6 +281,7 @@ describe("opening adapter", function()
 				[107] = false,
 				[108] = false,
 				[110] = false,
+				[111] = false,
 			},
 			taskByUnit = { [105] = { -7, 700 } },
 		})

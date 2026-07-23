@@ -101,13 +101,23 @@ describe("opening progress", function()
 
 	it("accepts solar as an energy alternative even when wind data is missing", function()
 		local value = observation()
-		value.finishedCounts.cormex = 2
+		value.finishedCounts.cormex = 3
 		value.finishedCounts.corwin = nil
 		value.finishedCounts.corsolar = 1
 
 		local evaluated = OpeningProgress.evaluate(context, value)
 		assert.are.equal("complete", evaluated.milestones[1].state)
 		assert.are.equal("bot_lab", evaluated.nextMilestoneId)
+	end)
+
+	it("keeps base income in progress with only two mex and confirmed energy", function()
+		local value = observation()
+		value.finishedCounts.cormex = 2
+		value.finishedCounts.corwin = 1
+
+		local evaluated = OpeningProgress.evaluate(context, value)
+		assert.are.equal("in_progress", evaluated.milestones[1].state)
+		assert.are.equal("base_income", evaluated.nextMilestoneId)
 	end)
 
 	it("does not treat out-of-order factory completion as an error", function()
@@ -121,7 +131,7 @@ describe("opening progress", function()
 
 	it("requires both a constructor and initial combat bots", function()
 		local value = observation()
-		value.finishedCounts.cormex = 2
+		value.finishedCounts.cormex = 3
 		value.finishedCounts.corwin = 1
 		value.finishedCounts.corlab = 1
 		value.finishedCounts.corck = 1

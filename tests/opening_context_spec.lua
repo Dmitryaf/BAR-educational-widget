@@ -12,6 +12,8 @@ describe("opening context", function()
 		assert.are.equal("Ravaged Remake v1.2", context.mapName)
 		assert.are.equal("corcom", context.commanderUnitDefName)
 		assert.are.equal("corlab", context.factoryUnitDefName)
+		assert.are.equal(3, context.thresholds.baseMex)
+		assert.are.equal("Закончи три mex и добавь раннюю генерацию энергии.", context.milestones[1].action)
 		assert.are.equal("corak", context.countGroups.combatBots[1])
 	end)
 
@@ -25,7 +27,7 @@ describe("opening context", function()
 		first.countGroups.combatBots[1] = "changed"
 
 		local second = OpeningContext.get()
-		assert.are.equal(2, second.thresholds.baseMex)
+		assert.are.equal(3, second.thresholds.baseMex)
 		assert.are.equal("corak", second.countGroups.combatBots[1])
 	end)
 

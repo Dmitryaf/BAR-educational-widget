@@ -18,7 +18,7 @@ local CONTEXT = {
 		combatBots = { "corak", "corstorm", "corthud", "corcrash" },
 	},
 	thresholds = {
-		baseMex = 2,
+		baseMex = 3,
 		baseEnergy = 1,
 		initialCombatBots = 3,
 		expansionMex = 1,
@@ -29,7 +29,7 @@ local CONTEXT = {
 		{
 			id = "base_income",
 			title = "Запусти базовый доход",
-			action = "Закончи два mex и добавь раннюю генерацию энергии.",
+			action = "Закончи три mex и добавь раннюю генерацию энергии.",
 		},
 		{
 			id = "bot_lab",
