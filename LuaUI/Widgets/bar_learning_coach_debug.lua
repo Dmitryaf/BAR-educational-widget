@@ -458,6 +458,10 @@ local function buildLines()
 			.. fmtInteger(openingObservation.finishedCounts.corck) .. " / "
 			.. fmtInteger(openingObservation.finishedCounts.combatBots)
 	) or "unknown / unknown / unknown")
+	append(lines, "  expansion mex", openingObservation
+		and fmtInteger(openingObservation.finishedCounts.expansionMex) or "unknown")
+	append(lines, "  start position", openingObservation and openingObservation.evidence.startPosition
+		and fmtFlag(openingObservation.evidence.startPosition.known, "known", "unknown") or "unknown")
 	append(lines, "  factory active / idle", openingObservation and (
 		fmtFlag(openingObservation.factory.active, "yes", "no") .. " / "
 			.. fmtAge(openingObservation.factory.idleDuration)

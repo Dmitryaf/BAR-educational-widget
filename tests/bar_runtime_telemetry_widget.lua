@@ -166,7 +166,11 @@ local function collect()
 		"apiBuildState=" .. field(opening.evidence.api and opening.evidence.api.getUnitIsBeingBuilt),
 		"apiWorkerTask=" .. field(opening.evidence.api and opening.evidence.api.getUnitWorkerTask),
 		"apiPosition=" .. field(opening.evidence.api and opening.evidence.api.getUnitPosition),
+		"apiStartPosition=" .. field(opening.evidence.api and opening.evidence.api.getTeamStartPosition),
 		"apiUnitDefs=" .. field(opening.evidence.api and opening.evidence.api.unitDefs),
+		"startPositionKnown=" .. field(opening.evidence.startPosition and opening.evidence.startPosition.known),
+		"startX=" .. value(opening.evidence.startPosition and opening.evidence.startPosition.x),
+		"startZ=" .. value(opening.evidence.startPosition and opening.evidence.startPosition.z),
 		"cormex=" .. value(opening.finishedCounts.cormex),
 		"corwin=" .. value(opening.finishedCounts.corwin),
 		"corsolar=" .. value(opening.finishedCounts.corsolar),
@@ -205,6 +209,8 @@ local function collect()
 			"positionKnown=" .. field(mex.positionKnown),
 			"x=" .. value(mex.x),
 			"z=" .. value(mex.z),
+			"distanceFromStart=" .. value(mex.distanceFromStart),
+			"outsideStartRadius=" .. field(mex.outsideStartRadius),
 		}, " "))
 	end
 
