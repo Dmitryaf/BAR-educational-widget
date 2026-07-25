@@ -192,7 +192,23 @@ local function validContext(context)
 	return #context.milestones > 0
 end
 
-function OpeningProgress.evaluate(context, observation)
+local function applyCompletionMemory(milestones, completionMemory)
+	if type(completionMemory) ~= "table" then
+		return
+	end
+
+	for i = 1, #milestones do
+		local milestone = milestones[i]
+		if completionMemory[milestone.id] == true and milestone.state ~= "complete" then
+			milestone.observedState = milestone.state
+			milestone.observedReason = milestone.reason
+			milestone.state = "complete"
+			milestone.reason = "completed earlier"
+		end
+	end
+end
+
+function OpeningProgress.evaluate(context, observation, completionMemory)
 	if type(context) ~= "table" or type(context.id) ~= "string" then
 		return unknownEvaluation(nil, "context missing")
 	end
@@ -238,6 +254,7 @@ function OpeningProgress.evaluate(context, observation)
 			milestones[i] = result(milestoneId, "unknown", "milestone evaluator missing")
 		end
 	end
+	applyCompletionMemory(milestones, completionMemory)
 
 	local nextMilestoneIndex = nil
 	for i = 1, #milestones do

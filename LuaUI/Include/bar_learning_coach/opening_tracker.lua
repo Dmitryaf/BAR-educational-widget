@@ -27,6 +27,7 @@ function OpeningTracker.new(adapter, context)
 		lastContextId = nil,
 		lastGameTime = nil,
 		factoryIdleSince = nil,
+		completedMilestones = {},
 	}, OpeningTracker)
 end
 
@@ -35,6 +36,7 @@ function OpeningTracker:reset()
 	self.lastContextId = nil
 	self.lastGameTime = nil
 	self.factoryIdleSince = nil
+	self.completedMilestones = {}
 end
 
 function OpeningTracker:invalidate()
@@ -86,6 +88,33 @@ function OpeningTracker:observe(teamID, gameTime, energyState)
 	self.lastContextId = contextId
 	self.lastGameTime = finiteNumber(gameTime) and gameTime or nil
 	return observation, nil
+end
+
+function OpeningTracker:evaluate(teamID, gameTime, energyState, progressEvaluator)
+	local observation, observationError = self:observe(teamID, gameTime, energyState)
+	if observation == nil then
+		return nil, nil, observationError
+	end
+	if type(progressEvaluator) ~= "table" or type(progressEvaluator.evaluate) ~= "function" then
+		return observation, nil, "progress evaluator unavailable"
+	end
+
+	local evaluated = progressEvaluator.evaluate(self.context, observation, self.completedMilestones)
+	local contextId = type(self.context) == "table" and self.context.id or nil
+	local supported = observation.contextStatus == "supported" and observation.contextId == contextId
+	if supported and type(evaluated) == "table" and type(evaluated.milestones) == "table" then
+		for i = 1, #evaluated.milestones do
+			local milestone = evaluated.milestones[i]
+			if type(milestone) == "table"
+				and type(milestone.id) == "string"
+				and milestone.state == "complete"
+			then
+				self.completedMilestones[milestone.id] = true
+			end
+		end
+	end
+
+	return observation, evaluated, nil
 end
 
 return OpeningTracker

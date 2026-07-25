@@ -305,8 +305,12 @@ local function collectOpening(force)
 		return
 	end
 
-	openingObservation = openingTracker:observe(snapshot.teamID, snapshot.gameTime, energyDiagnostic.state)
-	openingProgress = OpeningProgress.evaluate(openingContext, openingObservation)
+	openingObservation, openingProgress = openingTracker:evaluate(
+		snapshot.teamID,
+		snapshot.gameTime,
+		energyDiagnostic.state,
+		OpeningProgress
+	)
 	lastOpeningCollectionTime = snapshot.gameTime
 	openingDirty = false
 end

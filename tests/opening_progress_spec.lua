@@ -214,6 +214,47 @@ describe("opening progress", function()
 		assert.are.equal("in_progress", evaluated.milestones[5].progressState)
 	end)
 
+	it("keeps an explicitly remembered milestone complete while exposing current regression", function()
+		local value = observation()
+		local evaluated = OpeningProgress.evaluate(context, value, {
+			base_income = true,
+		})
+
+		assert.are.equal("complete", evaluated.milestones[1].state)
+		assert.are.equal("not_started", evaluated.milestones[1].observedState)
+		assert.are.equal("completed earlier", evaluated.milestones[1].reason)
+		assert.are.equal("bot_lab", evaluated.nextMilestoneId)
+	end)
+
+	it("does not infer completion from absent or false memory", function()
+		local value = observation()
+		local evaluated = OpeningProgress.evaluate(context, value, {
+			base_income = false,
+			bot_lab = "complete",
+		})
+
+		assert.are.equal("not_started", evaluated.milestones[1].state)
+		assert.are.equal("not_started", evaluated.milestones[2].state)
+	end)
+
+	it("keeps a remembered completed lesson closed during later recovery", function()
+		local value = observation({
+			recovery = { energyState = "active" },
+		})
+		local evaluated = OpeningProgress.evaluate(context, value, {
+			base_income = true,
+			bot_lab = true,
+			production_cycle = true,
+			first_expansion = true,
+			t1_loop = true,
+		})
+
+		assert.are.equal("complete", evaluated.lessonState)
+		assert.is_nil(evaluated.nextMilestoneId)
+		assert.are.equal("none", evaluated.presentation)
+		assert.are.equal("not_started", evaluated.milestones[5].observedState)
+	end)
+
 	it("treats an invalid negative count as unknown", function()
 		local value = observation()
 		value.finishedCounts.cormex = -1

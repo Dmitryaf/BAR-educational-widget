@@ -1,6 +1,28 @@
 local loadModule = VFS and VFS.Include or dofile
 local OpeningTracker = loadModule("LuaUI/Include/bar_learning_coach/opening_tracker.lua")
 
+local function fakeProgressEvaluator()
+	return {
+		evaluate = function(_, current, completionMemory)
+			local currentState = current.milestoneState or "not_started"
+			local remembered = completionMemory.step == true
+			local completed = remembered or currentState == "complete"
+			return {
+				lessonState = completed and "complete" or "in_progress",
+				nextMilestoneId = completed and nil or "step",
+				presentation = completed and "none" or "milestone",
+				milestones = {
+					{
+						id = "step",
+						state = remembered and "complete" or currentState,
+						observedState = remembered and currentState or nil,
+					},
+				},
+			}
+		end,
+	}
+end
+
 local function observation(factoryCount, factoryActive, contextStatus)
 	local status = contextStatus or "supported"
 	return {
@@ -141,5 +163,130 @@ describe("opening tracker", function()
 		local result = tracker:observe(1, 30, "inactive")
 
 		assert.are.equal(0, result.factory.idleDuration)
+	end)
+
+	it("remembers a completed milestone across later current-state regression", function()
+		local complete = observation(1, true)
+		complete.milestoneState = "complete"
+		local regressed = observation(0, false)
+		regressed.milestoneState = "not_started"
+		local tracker = OpeningTracker.new(fakeAdapter({ complete, regressed }), context)
+		local evaluator = fakeProgressEvaluator()
+
+		local _, firstProgress = tracker:evaluate(1, 10, "inactive", evaluator)
+		local _, secondProgress = tracker:evaluate(1, 20, "inactive", evaluator)
+
+		assert.are.equal("complete", firstProgress.lessonState)
+		assert.are.equal("complete", secondProgress.lessonState)
+		assert.are.equal("not_started", secondProgress.milestones[1].observedState)
+	end)
+
+	it("clears completed milestones when game time rewinds", function()
+		local complete = observation(1, true)
+		complete.milestoneState = "complete"
+		local fresh = observation(0, false)
+		fresh.milestoneState = "not_started"
+		local tracker = OpeningTracker.new(fakeAdapter({ complete, fresh }), context)
+		local evaluator = fakeProgressEvaluator()
+
+		tracker:evaluate(1, 30, "inactive", evaluator)
+		local _, progress = tracker:evaluate(1, 5, "inactive", evaluator)
+
+		assert.are.equal("in_progress", progress.lessonState)
+		assert.are.equal("not_started", progress.milestones[1].state)
+	end)
+
+	it("clears completed milestones when team changes", function()
+		local complete = observation(1, true)
+		complete.milestoneState = "complete"
+		local fresh = observation(0, false)
+		fresh.milestoneState = "not_started"
+		local tracker = OpeningTracker.new(fakeAdapter({ complete, fresh }), context)
+		local evaluator = fakeProgressEvaluator()
+
+		tracker:evaluate(1, 10, "inactive", evaluator)
+		local _, progress = tracker:evaluate(2, 20, "inactive", evaluator)
+
+		assert.are.equal("in_progress", progress.lessonState)
+		assert.are.equal("not_started", progress.milestones[1].state)
+	end)
+
+	it("clears completed milestones when lesson context changes", function()
+		local complete = observation(1, true)
+		complete.milestoneState = "complete"
+		local fresh = observation(0, false)
+		fresh.contextId = "other_lesson"
+		fresh.milestoneState = "not_started"
+		local tracker = OpeningTracker.new(fakeAdapter({ complete, fresh }), context)
+		local evaluator = fakeProgressEvaluator()
+
+		tracker:evaluate(1, 10, "inactive", evaluator)
+		tracker.context = { id = "other_lesson" }
+		local _, progress = tracker:evaluate(1, 20, "inactive", evaluator)
+
+		assert.are.equal("in_progress", progress.lessonState)
+		assert.are.equal("not_started", progress.milestones[1].state)
+	end)
+
+	it("clears completed milestones on explicit reset", function()
+		local complete = observation(1, true)
+		complete.milestoneState = "complete"
+		local fresh = observation(0, false)
+		fresh.milestoneState = "not_started"
+		local tracker = OpeningTracker.new(fakeAdapter({ complete, fresh }), context)
+		local evaluator = fakeProgressEvaluator()
+
+		tracker:evaluate(1, 10, "inactive", evaluator)
+		tracker:reset()
+		local _, progress = tracker:evaluate(1, 20, "inactive", evaluator)
+
+		assert.are.equal("in_progress", progress.lessonState)
+		assert.are.equal("not_started", progress.milestones[1].state)
+	end)
+
+	it("does not remember an unknown milestone as complete", function()
+		local unknown = observation(0, false)
+		unknown.milestoneState = "unknown"
+		local fresh = observation(0, false)
+		fresh.milestoneState = "not_started"
+		local tracker = OpeningTracker.new(fakeAdapter({ unknown, fresh }), context)
+		local evaluator = fakeProgressEvaluator()
+
+		local _, firstProgress = tracker:evaluate(1, 10, "inactive", evaluator)
+		local _, secondProgress = tracker:evaluate(1, 20, "inactive", evaluator)
+
+		assert.are.equal("unknown", firstProgress.milestones[1].state)
+		assert.are.equal("not_started", secondProgress.milestones[1].state)
+	end)
+
+	it("does not expose remembered progress through an unsupported observation", function()
+		local complete = observation(1, true)
+		complete.milestoneState = "complete"
+		local unsupported = observation(0, false, "unsupported")
+		unsupported.milestoneState = "not_started"
+		local tracker = OpeningTracker.new(fakeAdapter({ complete, unsupported }), context)
+		local evaluator = {
+			evaluate = function(_, current, completionMemory)
+				if current.contextStatus ~= "supported" then
+					return { lessonState = "unknown", milestones = {} }
+				end
+				return fakeProgressEvaluator().evaluate(nil, current, completionMemory)
+			end,
+		}
+
+		tracker:evaluate(1, 10, "inactive", evaluator)
+		local _, progress = tracker:evaluate(1, 20, "inactive", evaluator)
+
+		assert.are.equal("unknown", progress.lessonState)
+		assert.are.equal(0, #progress.milestones)
+	end)
+
+	it("returns an explicit error when progress evaluator is unavailable", function()
+		local tracker = OpeningTracker.new(fakeAdapter({ observation(0, false) }), context)
+		local current, progress, reason = tracker:evaluate(1, 10, "inactive", nil)
+
+		assert.are.equal("table", type(current))
+		assert.is_nil(progress)
+		assert.are.equal("progress evaluator unavailable", reason)
 	end)
 end)

@@ -109,8 +109,7 @@ local function collect()
 	local recommendation = EnergyStallRecommendation.fromDiagnostic(result)
 	local buildPowerRaw = buildPowerAdapter:collect(currentTeamID)
 	local buildPower = BuildPowerSnapshot.fromRaw(buildPowerRaw)
-	local opening = openingTracker:observe(currentTeamID, gameTime, result.state)
-	local progress = OpeningProgress.evaluate(openingContext, opening)
+	local opening, progress = openingTracker:evaluate(currentTeamID, gameTime, result.state, OpeningProgress)
 
 	sampleCount = sampleCount + 1
 	Spring.Echo(table.concat({
