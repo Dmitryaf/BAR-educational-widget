@@ -7,13 +7,7 @@ pnpm-debug.log*
 Thumbs.db
 
 tasks/
-
-# Local historical documentation.
 docs/archive/
-
-# Raw runtime evidence.
-docs/runtime/**/*.csv
-docs/runtime/**/*.txt
-
-# Detailed replay and manual-run evidence with player or local process context.
-docs/runtime/opening/private/
+docs/decisions/
+docs/research/
+docs/runtime/
