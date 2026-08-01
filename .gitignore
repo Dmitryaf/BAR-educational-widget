@@ -6,6 +6,21 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 
-AGENTS.md
-docs/
 tasks/
+
+# Local historical documentation.
+docs/archive/
+
+# Raw runtime evidence.
+docs/runtime/**/*.csv
+docs/runtime/**/*.txt
+
+# Detailed replay and manual-run evidence with player or local process context.
+docs/runtime/opening/phase6f_3of8_comparison_2026-07-23.md
+docs/runtime/opening/phase6f_4of8_decision_2026-07-23.md
+docs/runtime/opening/phase6f_replay_selection_manifest_2026-07-22.md
+docs/runtime/opening/phase6f_revan_isidis_opening_analysis_2026-07-22.md
+docs/runtime/opening/phase6f_revan_tundra_opening_analysis_2026-07-23.md
+docs/runtime/opening/phase6f_sashkorin_archsimkats_opening_analysis_2026-07-23.md
+docs/runtime/opening/phase6f_sashkorin_canis_opening_analysis_2026-07-23.md
+docs/runtime/opening/phase6g_manual_ravaged_2026-07-23.md
