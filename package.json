@@ -2,6 +2,7 @@
   "name": "bar-educational-widget",
   "version": "0.0.0",
   "private": true,
+  "license": "GPL-2.0-or-later",
   "description": "Personal educational LuaUI widget for Beyond All Reason.",
   "scripts": {
     "prepare": "husky",

@@ -4,9 +4,9 @@ function widget:GetInfo()
 	return {
 		name = "BAR Learning Coach Telemetry",
 		desc = "Collects resource and ENERGY_STALL diagnostic samples for runtime verification",
-		author = "Dmitry / Codex",
+		author = "Dmitry Afonasenko",
 		date = "2026-07-21",
-		license = "GNU GPL, v2 or later",
+		license = "GPL-2.0-or-later",
 		layer = 1,
 		enabled = true,
 	}

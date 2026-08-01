@@ -4,9 +4,9 @@ function widget:GetInfo()
 	return {
 		name = "BAR Learning Coach Replay Control",
 		desc = "Keeps research replay playback at 1x and clears the initial pause",
-		author = "Dmitry / Codex",
+		author = "Dmitry Afonasenko",
 		date = "2026-07-23",
-		license = "GNU GPL, v2 or later",
+		license = "GPL-2.0-or-later",
 		layer = 1,
 		enabled = true,
 	}

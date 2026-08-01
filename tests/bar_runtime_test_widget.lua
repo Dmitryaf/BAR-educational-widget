@@ -4,9 +4,9 @@ function widget:GetInfo()
 	return {
 		name = "BAR Learning Coach Tests",
 		desc = "Runs BAR Learning Coach domain specs in the Recoil Lua runtime",
-		author = "Dmitry / Codex",
+		author = "Dmitry Afonasenko",
 		date = "2026-07-21",
-		license = "GNU GPL, v2 or later",
+		license = "GPL-2.0-or-later",
 		layer = 1,
 		enabled = true,
 	}
