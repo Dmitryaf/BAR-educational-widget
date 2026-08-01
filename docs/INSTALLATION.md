@@ -1,49 +1,47 @@
 # Установка BAR Learning Coach
 
-Это руководство устанавливает только production widget и необходимые helper-модули. Оно не устанавливает BAR, не меняет игровые настройки автоматически и не подтверждает community-ready distribution.
+Инструкция устанавливает только production widget и его зависимости. Виджет предназначен для custom/user widgets и по умолчанию выключен.
 
-## Требования и подтверждённая граница
+## Поддерживаемый lesson
 
-- установленный Beyond All Reason с разрешёнными user/custom widgets для локальной practice;
-- актуальная структура `LuaUI/Widgets` и `LuaUI/Include`, используемая BAR после переноса helper-файлов из старого `LuaUI/Widgets/Include`;
-- последний доверенный opening runtime проекта: Recoil и game version `2026.06.12`;
-- первый lesson ограничен `Ravaged Remake v1.2`, Cortex, Bot Lab и локальной 1v1 practice.
-
-Подтверждённая версия — это версия последней технической проверки, а не заявленный минимальный системный requirement. Пользовательская opening-card ещё не реализована: текущий widget показывает recovery-рекомендацию при подтверждённом energy stall и содержит debug-интерфейс.
+Первый lesson рассчитан на `Ravaged Remake v1.2` за Cortex с Cortex Bot Lab. Для воспроизводимой практики рекомендуется локальная 1v1. Runtime guard проверяет карту и Cortex commander, но не подтверждает режим матча или выбранную фабрику заранее.
 
 ## Найти data directory
 
-Открой BAR launcher и используй кнопку **Open install directory**. Используй открытый launcher каталог как фактический BAR data directory; не копируй пример пути другого пользователя и не считай конкретный Windows/macOS/Linux путь универсальным.
-
-Дальше в примерах:
+Откройте BAR launcher и выберите **Open install directory**. В PowerShell задайте открытый каталог и убедитесь, что это именно BAR data directory:
 
 ```powershell
 $BarDataDir = 'PATH_OPENED_BY_BAR_LAUNCHER'
 ```
 
-Перед копированием проверь, что переменная указывает именно на каталог данных BAR. Команды ниже выполняются из корня чистого clone этого репозитория.
+Следующие команды выполняются из корня clone этого репозитория.
 
-## Установка
+## Установка или обновление
 
-Создай целевые каталоги:
+Создайте каталоги:
 
 ```powershell
 New-Item -ItemType Directory -Force -Path (Join-Path $BarDataDir 'LuaUI/Widgets')
 New-Item -ItemType Directory -Force -Path (Join-Path $BarDataDir 'LuaUI/Include/bar_learning_coach')
 ```
 
-Скопируй production entrypoint:
+Если раньше был установлен debug-entrypoint, сначала удалите только его, чтобы BAR не загрузил две копии:
 
 ```powershell
-Copy-Item -LiteralPath 'LuaUI/Widgets/bar_learning_coach_debug.lua' -Destination (Join-Path $BarDataDir 'LuaUI/Widgets/bar_learning_coach_debug.lua') -Force
+Remove-Item -LiteralPath (Join-Path $BarDataDir 'LuaUI/Widgets/bar_learning_coach_debug.lua') -ErrorAction SilentlyContinue
 ```
 
-Скопируй только helper-модули, которые entrypoint загружает через `VFS.Include`:
+Скопируйте новый entrypoint:
+
+```powershell
+Copy-Item -LiteralPath 'LuaUI/Widgets/bar_learning_coach.lua' -Destination (Join-Path $BarDataDir 'LuaUI/Widgets/bar_learning_coach.lua') -Force
+```
+
+Скопируйте девять production helpers:
 
 ```powershell
 $HelperFiles = @(
-  'build_power_adapter.lua',
-  'build_power_snapshot.lua',
+  'coach_presentation.lua',
   'energy_stall.lua',
   'energy_stall_recommendation.lua',
   'history_buffer.lua',
@@ -59,70 +57,34 @@ foreach ($FileName in $HelperFiles) {
 }
 ```
 
-Не копируй `tests/`, `tools/`, `docs/`, `tasks/`, runtime evidence или `replay_opening_collector.lua`. Для production widget они не нужны. Отдельный project-specific файл в `LuaUI/Config` также не требуется.
+Не копируйте `tests/`, research/runtime files, replay collector и build-power modules: production widget их не загружает.
 
-Итоговая структура:
+## Включение и проверка
 
-```text
-LuaUI/
-├── Widgets/
-│   └── bar_learning_coach_debug.lua
-└── Include/
-    └── bar_learning_coach/
-        ├── build_power_adapter.lua
-        ├── build_power_snapshot.lua
-        ├── energy_stall.lua
-        ├── energy_stall_recommendation.lua
-        ├── history_buffer.lua
-        ├── opening_adapter.lua
-        ├── opening_context.lua
-        ├── opening_progress.lua
-        ├── opening_tracker.lua
-        └── snapshot_collector.lua
-```
+1. Запустите локальную practice с разрешёнными user widgets.
+2. Откройте Widget Selector клавишей `F11`.
+3. Найдите **BAR Learning Coach** и включите его.
+4. Если файлы копировались при запущенном BAR, перезагрузите LuaUI или матч.
 
-## Включение
+В поддерживаемом контексте должна появиться одна milestone-card. При подтверждённом energy stall она временно сменяется recovery-card; после завершения lesson показывается итог. На другой карте или faction показывается нейтральный unsupported status. Проверяйте `infolog.txt` на первое сообщение `[BAR Learning Coach]` и ошибки `VFS.Include`.
 
-1. Запусти локальную practice, в которой user widgets разрешены.
-2. Открой встроенный **Widget Selector** клавишей `F11` и при необходимости разреши user widgets его штатной кнопкой.
-3. Найди **BAR Learning Coach** и включи его: в metadata проекта `enabled=false`, поэтому первая установка не включает widget автоматически.
-4. Если BAR уже был запущен во время копирования, перезагрузи LuaUI штатной командой Widget Selector либо перезапусти матч.
-
-## Проверка
-
-- **BAR Learning Coach** присутствует и включён в Widget Selector;
-- `infolog.txt` не содержит собственных ошибок `[BAR Learning Coach Debug]` или ошибок `VFS.Include` для `LuaUI/Include/bar_learning_coach/`;
-- в подтверждённом supported context widget собирает собственное opening/economy state;
-- при подтверждённом energy stall может появиться recovery-card;
-- в здоровом или неподдерживаемом context постоянная карточка может отсутствовать: отдельная opening-card ещё не реализована, а неизвестные данные не должны давать уверенный совет;
-- установка не использует ignored research, tasks, archive или runtime evidence.
-
-Эта проверка подтверждает структуру и отсутствие видимых ошибок загрузки. Она не доказывает usefulness и не заменяет отдельный BAR runtime validation.
-
-## Обновление
-
-Повтори команды копирования для entrypoint и десяти helper-модулей, заменив старые версии. Предварительное удаление не требуется. После замены перезагрузи LuaUI или перезапусти матч.
-
-У проекта нет обязательного собственного config-файла. BAR может хранить состояние включения и `GetConfigData` в общем widget config; обновление production-файлов не требует удалять этот общий файл.
+Эта проверка подтверждает загрузку, но не пользовательскую полезность.
 
 ## Удаление
 
-Сначала отключи **BAR Learning Coach** в Widget Selector. Затем, только после повторной проверки `$BarDataDir`, удали проектные файлы:
+Отключите widget, повторно проверьте `$BarDataDir`, затем удалите только проектные файлы:
 
 ```powershell
-Remove-Item -LiteralPath (Join-Path $BarDataDir 'LuaUI/Widgets/bar_learning_coach_debug.lua')
+Remove-Item -LiteralPath (Join-Path $BarDataDir 'LuaUI/Widgets/bar_learning_coach.lua')
 Remove-Item -LiteralPath (Join-Path $BarDataDir 'LuaUI/Include/bar_learning_coach') -Recurse
 ```
 
-Не удаляй общий каталог `LuaUI/Include`, общий BAR widget config или другие custom widgets. Отдельного project-specific config-файла нет; оставшаяся запись состояния в общем BAR config не загружает отсутствующий widget.
-
-После удаления перезагрузи LuaUI или перезапусти матч и проверь, что **BAR Learning Coach** исчез из списка локальных widgets.
+Не удаляйте общий `LuaUI/Include`, общий BAR widget config или другие custom widgets.
 
 ## Troubleshooting
 
-- **Widget отсутствует в списке:** проверь, что файл лежит непосредственно в `LuaUI/Widgets`, user widgets разрешены и нет второй ошибочной вложенности `LuaUI/LuaUI`.
-- **`VFS.Include` не находит модуль:** helper-файлы должны находиться в `LuaUI/Include/bar_learning_coach`, а не в устаревшем `LuaUI/Widgets/Include`.
-- **Widget включён, но ничего не рисует:** постоянная opening-card ещё не реализована; проверь supported context и `infolog.txt`, а не считай отсутствие карточки успешным или ошибочным автоматически.
-- **В `infolog.txt` есть ошибка:** ищи первое сообщение `[BAR Learning Coach Debug]` и точный missing include/API status; не копируй test widgets как исправление.
-- **Opening неподдерживаемый:** текущий lesson намеренно ограничен одной картой, faction и factory; другой context должен безопасно молчать.
-- **Загружаются две копии:** найди и удали только лишнюю копию `bar_learning_coach_debug.lua`, затем перезагрузи LuaUI.
+- Widget отсутствует: проверьте разрешение user widgets, прямое размещение entrypoint в `LuaUI/Widgets` и отсутствие лишней вложенности `LuaUI/LuaUI`.
+- Missing include: все девять helpers должны лежать в `LuaUI/Include/bar_learning_coach`.
+- Загружаются две копии: удалите старый `bar_learning_coach_debug.lua`, оставив `bar_learning_coach.lua`.
+- Подсказка временно недоступна: widget не смог подтвердить необходимые данные и намеренно не выдаёт gameplay-совет.
+- Lesson неподдерживаемый: сверьте карту и Cortex faction; режим local 1v1 и Bot Lab — рекомендуемый сценарий, а не отдельный preflight check.

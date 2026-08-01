@@ -7,6 +7,7 @@ local context = OpeningContext.get()
 local function observation(overrides)
 	local value = {
 		contextId = context.id,
+		contextStatus = "supported",
 		finishedCounts = {
 			cormex = 0,
 			corwin = 0,
@@ -59,7 +60,7 @@ describe("opening progress", function()
 
 		local evaluated = OpeningProgress.evaluate(context, value)
 		assert.are.equal("unknown", evaluated.lessonState)
-		assert.are.equal("unsupported context", evaluated.reason)
+		assert.are.equal("context identity unavailable", evaluated.reason)
 	end)
 
 	it("returns unknown instead of throwing for an invalid context", function()
@@ -79,7 +80,7 @@ describe("opening progress", function()
 		assert.are.equal("unknown", evaluated.lessonState)
 		assert.are.equal("base_income", evaluated.nextMilestoneId)
 		assert.are.equal("unknown", evaluated.milestones[1].state)
-		assert.are.equal("none", evaluated.presentation)
+		assert.are.equal("temporarily_unavailable", evaluated.presentation)
 	end)
 
 	it("starts with the base income milestone", function()
@@ -178,6 +179,14 @@ describe("opening progress", function()
 		assert.are.equal("not_started", evaluated.milestones[1].state)
 	end)
 
+	it("returns to the milestone while energy recovery is resolving", function()
+		local value = observation()
+		value.recovery.energyState = "resolving"
+
+		local evaluated = OpeningProgress.evaluate(context, value)
+		assert.are.equal("milestone", evaluated.presentation)
+	end)
+
 	it("keeps the final milestone in progress while factory is idle too long", function()
 		local value = observation({ finishedCounts = readyCounts() })
 
@@ -195,7 +204,7 @@ describe("opening progress", function()
 		local evaluated = OpeningProgress.evaluate(context, value)
 		assert.are.equal("complete", evaluated.lessonState)
 		assert.is_nil(evaluated.nextMilestoneId)
-		assert.are.equal("none", evaluated.presentation)
+		assert.are.equal("lesson_complete", evaluated.presentation)
 		assert.are.equal("complete", evaluated.milestones[5].state)
 	end)
 
@@ -251,8 +260,21 @@ describe("opening progress", function()
 
 		assert.are.equal("complete", evaluated.lessonState)
 		assert.is_nil(evaluated.nextMilestoneId)
-		assert.are.equal("none", evaluated.presentation)
+		assert.are.equal("lesson_complete", evaluated.presentation)
 		assert.are.equal("not_started", evaluated.milestones[5].observedState)
+	end)
+
+	it("selects unsupported setup before recovery", function()
+		local value = observation({
+			contextId = nil,
+			contextStatus = "unsupported",
+			reason = "map unsupported",
+			recovery = { energyState = "active" },
+		})
+
+		local evaluated = OpeningProgress.evaluate(context, value)
+		assert.are.equal("unsupported", evaluated.lessonState)
+		assert.are.equal("unsupported_setup", evaluated.presentation)
 	end)
 
 	it("treats an invalid negative count as unknown", function()

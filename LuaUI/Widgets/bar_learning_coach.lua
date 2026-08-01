@@ -3,7 +3,7 @@ local widget = widget
 function widget:GetInfo()
 	return {
 		name = "BAR Learning Coach",
-		desc = "Explains sustained economy problems without playing for the user",
+		desc = "Guides one context-bound opening without playing for the user",
 		author = "Dmitry Afonasenko",
 		date = "2026-07-18",
 		license = "GPL-2.0-or-later",
@@ -13,7 +13,6 @@ function widget:GetInfo()
 end
 
 local UPDATE_INTERVAL = 0.5
-local BUILD_POWER_INTERVAL = 2.0
 local OPENING_INTERVAL = 2.0
 local HISTORY_CAPACITY = 240
 local DEFAULT_X = 0.66
@@ -26,12 +25,11 @@ local HistoryBuffer = VFS.Include(MODULE_ROOT .. "history_buffer.lua")
 local EnergyStall = VFS.Include(MODULE_ROOT .. "energy_stall.lua")
 local EnergyStallRecommendation = VFS.Include(MODULE_ROOT .. "energy_stall_recommendation.lua")
 local SnapshotCollector = VFS.Include(MODULE_ROOT .. "snapshot_collector.lua")
-local BuildPowerAdapter = VFS.Include(MODULE_ROOT .. "build_power_adapter.lua")
-local BuildPowerSnapshot = VFS.Include(MODULE_ROOT .. "build_power_snapshot.lua")
 local OpeningContext = VFS.Include(MODULE_ROOT .. "opening_context.lua")
 local OpeningAdapter = VFS.Include(MODULE_ROOT .. "opening_adapter.lua")
 local OpeningTracker = VFS.Include(MODULE_ROOT .. "opening_tracker.lua")
 local OpeningProgress = VFS.Include(MODULE_ROOT .. "opening_progress.lua")
+local CoachPresentation = VFS.Include(MODULE_ROOT .. "coach_presentation.lua")
 
 local panel = {
 	x = DEFAULT_X,
@@ -60,24 +58,22 @@ local initialized = false
 local history = HistoryBuffer.new(HISTORY_CAPACITY)
 local energyStall = EnergyStall.new()
 local snapshotCollector = SnapshotCollector.new(history, energyStall)
-local buildPowerAdapter = BuildPowerAdapter.new(Spring, UnitDefs)
 local openingContext = OpeningContext.get()
 local openingAdapter = OpeningAdapter.new(Spring, UnitDefs, Game)
 local openingTracker = OpeningTracker.new(openingAdapter, openingContext)
-local lastBuildPowerCollectionTime = nil
 local lastOpeningCollectionTime = nil
 local openingDirty = true
-local buildPower = BuildPowerSnapshot.fromRaw(nil)
 local openingObservation = nil
 local openingProgress = nil
 local energyDiagnostic = {
 	state = "unknown",
 	reason = "no snapshot yet",
 }
-local activeRecommendation = nil
+local energyRecommendation = nil
+local coachCard = { kind = "none" }
 
 local function updateRecommendation()
-	activeRecommendation = EnergyStallRecommendation.fromDiagnostic(energyDiagnostic)
+	energyRecommendation = EnergyStallRecommendation.fromDiagnostic(energyDiagnostic)
 end
 
 local function logFirstError(name, detail)
@@ -87,7 +83,7 @@ local function logFirstError(name, detail)
 
 	loggedErrors[name] = true
 	if Spring and type(Spring.Echo) == "function" then
-		Spring.Echo("[BAR Learning Coach Debug] " .. name .. ": " .. tostring(detail))
+		Spring.Echo("[BAR Learning Coach] " .. name .. ": " .. tostring(detail))
 	end
 end
 
@@ -281,19 +277,6 @@ local function readResource(resourceName)
 	return data
 end
 
-local function collectBuildPower(force)
-	if not force
-		and type(snapshot.gameTime) == "number"
-		and type(lastBuildPowerCollectionTime) == "number"
-		and snapshot.gameTime - lastBuildPowerCollectionTime < BUILD_POWER_INTERVAL
-	then
-		return
-	end
-
-	buildPower = BuildPowerSnapshot.fromRaw(buildPowerAdapter:collect(snapshot.teamID))
-	lastBuildPowerCollectionTime = snapshot.gameTime
-end
-
 local function collectOpening(force)
 	if not force
 		and not openingDirty
@@ -310,6 +293,12 @@ local function collectOpening(force)
 		snapshot.gameTime,
 		energyDiagnostic.state,
 		OpeningProgress
+	)
+	coachCard = CoachPresentation.build(
+		openingContext,
+		openingObservation,
+		openingProgress,
+		energyRecommendation
 	)
 	lastOpeningCollectionTime = snapshot.gameTime
 	openingDirty = false
@@ -352,8 +341,11 @@ local function collectSnapshot()
 	if snapshot.teamID == nil then
 		snapshot.resources.metal = {}
 		snapshot.resources.energy = {}
-		collectBuildPower(true)
+		local previousEnergyState = energyDiagnostic.state
 		energyDiagnostic = snapshotCollector:record(snapshot)
+		if previousEnergyState ~= energyDiagnostic.state then
+			openingDirty = true
+		end
 		updateRecommendation()
 		collectOpening(true)
 		return
@@ -361,7 +353,6 @@ local function collectSnapshot()
 
 	snapshot.resources.metal = readResource("metal")
 	snapshot.resources.energy = readResource("energy")
-	collectBuildPower(false)
 	if snapshot.gameTime ~= nil
 		and isResourceDataValid(snapshot.resources.metal)
 		and isResourceDataValid(snapshot.resources.energy)
@@ -369,7 +360,11 @@ local function collectSnapshot()
 		snapshot.lastValidSnapshotTime = snapshot.gameTime
 	end
 
+	local previousEnergyState = energyDiagnostic.state
 	energyDiagnostic = snapshotCollector:record(snapshot)
+	if previousEnergyState ~= energyDiagnostic.state then
+		openingDirty = true
+	end
 	updateRecommendation()
 	collectOpening(false)
 end
@@ -442,14 +437,8 @@ local function buildLines()
 	append(lines, "  cooldown remaining", fmtAge(energyDiagnostic.cooldownRemaining))
 	append(lines, "  history samples", tostring(history:size()))
 	append(lines, "  evidence", tostring(energyDiagnostic.reason or "condition tracked"))
-	append(lines, "Active recommendation", activeRecommendation and activeRecommendation.id or "none")
-	append(lines, "Build power status", tostring(buildPower.status))
-	append(lines, "  total / active", fmtNumber(buildPower.totalBuildPower) .. " / " .. fmtNumber(buildPower.activeBuildPower))
-	append(lines, "  known builders", fmtInteger(buildPower.knownBuilderCount))
-	append(lines, "  active / inactive", fmtInteger(buildPower.activeBuilderCount) .. " / " .. fmtInteger(buildPower.inactiveBuilderCount))
-	append(lines, "  construction targets", fmtInteger(#buildPower.targets))
-	append(lines, "  unknown units", fmtInteger(buildPower.unknownUnitCount))
-	append(lines, "  evidence", tostring(buildPower.reason))
+	append(lines, "Energy recommendation", energyRecommendation and energyRecommendation.id or "none")
+	append(lines, "Coach card", coachCard and tostring(coachCard.kind or "none") or "none")
 	append(lines, "Opening context", openingObservation and tostring(openingObservation.contextStatus) or "unknown")
 	append(lines, "  reason", openingObservation and tostring(openingObservation.reason) or "no observation")
 	append(lines, "  mex / wind / solar", openingObservation and (
@@ -548,8 +537,8 @@ local function drawPanel()
 	glColor(1, 1, 1, 1)
 end
 
-local function drawRecommendationCard()
-	if not initialized or activeRecommendation == nil then
+local function drawCoachCard()
+	if not initialized or type(coachCard) ~= "table" or coachCard.kind == "none" then
 		return
 	end
 
@@ -565,15 +554,24 @@ local function drawRecommendationCard()
 	local width = 480 * scale
 	local lineHeight = 19 * scale
 	local padding = 14 * scale
-	local lines = {
-		{ activeRecommendation.title, "title" },
-		{ activeRecommendation.fact, "fact" },
-		{ activeRecommendation.explanation, "detail" },
-		{ "Возможные действия:", "detail" },
-	}
-
-	for i = 1, #activeRecommendation.possibleActions do
-		lines[#lines + 1] = { "— " .. activeRecommendation.possibleActions[i], "action" }
+	local lines = {}
+	if type(coachCard.title) == "string" then
+		lines[#lines + 1] = { coachCard.title, "title" }
+	end
+	if type(coachCard.action) == "string" then
+		lines[#lines + 1] = { coachCard.action, coachCard.kind == "recovery" and "fact" or "action" }
+	end
+	if type(coachCard.doneWhen) == "string" then
+		lines[#lines + 1] = { "Готово, когда: " .. coachCard.doneWhen, "detail" }
+	end
+	if type(coachCard.detail) == "string" then
+		lines[#lines + 1] = { coachCard.detail, "detail" }
+	end
+	if type(coachCard.possibleActions) == "table" and #coachCard.possibleActions > 0 then
+		lines[#lines + 1] = { "Возможные действия:", "detail" }
+		for i = 1, #coachCard.possibleActions do
+			lines[#lines + 1] = { "— " .. coachCard.possibleActions[i], "action" }
+		end
 	end
 
 	local height = (#lines * lineHeight) + padding * 2
@@ -583,7 +581,15 @@ local function drawRecommendationCard()
 	local y2 = y1 + height
 	glColor(0.07, 0.08, 0.09, 0.94)
 	glRect(x1, y1, x2, y2)
-	glColor(0.95, 0.70, 0.20, 1.0)
+	if coachCard.kind == "recovery" then
+		glColor(0.95, 0.70, 0.20, 1.0)
+	elseif coachCard.kind == "lesson_complete" then
+		glColor(0.35, 0.78, 0.48, 1.0)
+	elseif coachCard.kind == "milestone" then
+		glColor(0.35, 0.68, 0.95, 1.0)
+	else
+		glColor(0.60, 0.64, 0.68, 1.0)
+	end
 	glRect(x1, y2 - 3 * scale, x2, y2)
 
 	for i = 1, #lines do
@@ -591,7 +597,13 @@ local function drawRecommendationCard()
 		local kind = lines[i][2]
 		local y = y2 - padding - i * lineHeight
 		if kind == "title" then
-			glColor(1.00, 0.84, 0.48, 1.0)
+			if coachCard.kind == "recovery" then
+				glColor(1.00, 0.84, 0.48, 1.0)
+			elseif coachCard.kind == "lesson_complete" then
+				glColor(0.72, 1.00, 0.78, 1.0)
+			else
+				glColor(0.78, 0.90, 1.00, 1.0)
+			end
 		elseif kind == "action" then
 			glColor(0.82, 0.88, 0.82, 1.0)
 		else
@@ -616,11 +628,10 @@ function widget:Shutdown()
 		state = "unknown",
 		reason = "widget stopped",
 	}
-	activeRecommendation = nil
-	lastBuildPowerCollectionTime = nil
+	energyRecommendation = nil
+	coachCard = { kind = "none" }
 	lastOpeningCollectionTime = nil
 	openingDirty = true
-	buildPower = BuildPowerSnapshot.fromRaw(nil)
 	openingTracker:reset()
 	openingObservation = nil
 	openingProgress = nil
@@ -680,7 +691,7 @@ function widget:DrawScreen()
 	if debugPanelEnabled then
 		drawPanel()
 	end
-	drawRecommendationCard()
+	drawCoachCard()
 end
 
 function widget:GetConfigData()

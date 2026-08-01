@@ -5,7 +5,7 @@ local DEFAULT_ID = "cortex_bot_ravaged_1v1_practice"
 local CONTEXT = {
 	id = DEFAULT_ID,
 	mapName = "Ravaged Remake v1.2",
-	mode = "local_1v1_practice",
+	recommendedEnvironment = "local_1v1_practice",
 	faction = "Cortex",
 	commanderUnitDefName = "corcom",
 	factoryUnitDefName = "corlab",
@@ -29,28 +29,33 @@ local CONTEXT = {
 	milestones = {
 		{
 			id = "base_income",
-			title = "Запусти базовый доход",
-			action = "Закончи три mex и добавь раннюю генерацию энергии.",
+			title = "Базовый доход",
+			action = "Закончи три mex и добавь wind или solar.",
+			doneWhen = "Три mex и хотя бы один wind или solar закончены.",
 		},
 		{
 			id = "bot_lab",
-			title = "Запусти производство",
-			action = "Закончи Cortex Bot Lab.",
+			title = "Bot Lab",
+			action = "Построй Cortex Bot Lab.",
+			doneWhen = "Cortex Bot Lab закончен.",
 		},
 		{
 			id = "production_cycle",
-			title = "Начни производственный цикл",
-			action = "Выпусти constructor и первые combat bots.",
+			title = "Constructor и первые bots",
+			action = "Выпусти constructor и три первых combat bots.",
+			doneWhen = "Constructor и три combat bots готовы.",
 		},
 		{
 			id = "first_expansion",
-			title = "Начни расширение",
-			action = "Закончи mex вне подтверждённой стартовой зоны.",
+			title = "Первое расширение",
+			action = "Закончи mex за пределами стартовой зоны.",
+			doneWhen = "Хотя бы один mex закончен вне стартовой зоны.",
 		},
 		{
 			id = "t1_loop",
-			title = "Закрепи T1-производство",
-			action = "Продолжай выпуск units и не оставляй factory без работы.",
+			title = "Устойчивый T1-цикл",
+			action = "Продолжай выпуск combat bots и держи Bot Lab в работе.",
+			doneWhen = "Пять combat bots готовы, Bot Lab работает и устойчивого energy stall нет.",
 		},
 	},
 }
@@ -95,7 +100,7 @@ function OpeningContext.validate(context)
 	local requiredStrings = {
 		"id",
 		"mapName",
-		"mode",
+		"recommendedEnvironment",
 		"faction",
 		"commanderUnitDefName",
 		"factoryUnitDefName",
@@ -164,6 +169,8 @@ function OpeningContext.validate(context)
 			or milestone.title == ""
 			or type(milestone.action) ~= "string"
 			or milestone.action == ""
+			or type(milestone.doneWhen) ~= "string"
+			or milestone.doneWhen == ""
 		then
 			return false, "context milestone invalid"
 		end

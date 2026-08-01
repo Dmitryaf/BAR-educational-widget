@@ -2,7 +2,6 @@ local OpeningProgress = {}
 
 local RECOVERY_STATES = {
 	active = true,
-	resolving = true,
 }
 
 local function finiteNonNegativeNumber(value)
@@ -148,12 +147,23 @@ local function evaluateT1Loop(context, observation, milestones)
 	return result("t1_loop", "in_progress")
 end
 
-local function unknownEvaluation(contextId, reason)
+local function unknownEvaluation(contextId, reason, presentation)
 	return {
 		contextId = contextId,
 		lessonState = "unknown",
 		nextMilestoneId = nil,
-		presentation = "none",
+		presentation = presentation or "temporarily_unavailable",
+		milestones = {},
+		reason = reason,
+	}
+end
+
+local function unsupportedEvaluation(contextId, reason)
+	return {
+		contextId = contextId,
+		lessonState = "unsupported",
+		nextMilestoneId = nil,
+		presentation = "unsupported_setup",
 		milestones = {},
 		reason = reason,
 	}
@@ -210,16 +220,22 @@ end
 
 function OpeningProgress.evaluate(context, observation, completionMemory)
 	if type(context) ~= "table" or type(context.id) ~= "string" then
-		return unknownEvaluation(nil, "context missing")
+		return unknownEvaluation(nil, "context missing", "none")
 	end
 	if not validContext(context) then
-		return unknownEvaluation(context.id, "context invalid")
+		return unknownEvaluation(context.id, "context invalid", "none")
 	end
 	if type(observation) ~= "table" then
 		return unknownEvaluation(context.id, "observation missing")
 	end
+	if observation.contextStatus == "unsupported" then
+		return unsupportedEvaluation(context.id, observation.reason or "setup unsupported")
+	end
+	if observation.contextStatus ~= "supported" then
+		return unknownEvaluation(context.id, observation.reason or "context unavailable")
+	end
 	if observation.contextId ~= context.id then
-		return unknownEvaluation(context.id, "unsupported context")
+		return unknownEvaluation(context.id, "context identity unavailable")
 	end
 	if type(observation.finishedCounts) ~= "table" then
 		return unknownEvaluation(context.id, "finished counts missing")
@@ -266,7 +282,7 @@ function OpeningProgress.evaluate(context, observation, completionMemory)
 	end
 
 	local lessonState = nextMilestoneIndex and "in_progress" or "complete"
-	local presentation = nextMilestoneIndex and "milestone" or "none"
+	local presentation = nextMilestoneIndex and "milestone" or "lesson_complete"
 	local recoveryState = observation.recovery and observation.recovery.energyState or nil
 	if nextMilestoneIndex and RECOVERY_STATES[recoveryState] then
 		local blocked = milestones[nextMilestoneIndex]
@@ -278,7 +294,7 @@ function OpeningProgress.evaluate(context, observation, completionMemory)
 
 	if nextMilestoneIndex and milestones[nextMilestoneIndex].state == "unknown" then
 		lessonState = "unknown"
-		presentation = "none"
+		presentation = "temporarily_unavailable"
 	end
 
 	return {
