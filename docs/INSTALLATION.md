@@ -59,7 +59,7 @@ foreach ($FileName in $HelperFiles) {
 }
 ```
 
-Не копируй `tests/`, `tools/`, `docs/`, `tasks/`, `.ai-rules/`, runtime evidence или `replay_opening_collector.lua`. Для production widget они не нужны. Отдельный project-specific файл в `LuaUI/Config` также не требуется.
+Не копируй `tests/`, `tools/`, `docs/`, `tasks/`, runtime evidence или `replay_opening_collector.lua`. Для production widget они не нужны. Отдельный project-specific файл в `LuaUI/Config` также не требуется.
 
 Итоговая структура:
 
