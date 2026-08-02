@@ -6,7 +6,7 @@ BAR Learning Coach — экспериментальный LuaUI-виджет д�
 
 ## Установка
 
-Скопируйте production widget и его helper-модули по [инструкции установки](docs/INSTALLATION.md), затем включите **BAR Learning Coach** через Widget Selector (`F11`). Виджет по умолчанию выключен.
+Запустите PowerShell-скрипт по [инструкции установки](docs/INSTALLATION.md), затем включите **BAR Learning Coach** через Widget Selector (`F11`). Тот же скрипт повторно запускается для обновления; виджет по умолчанию выключен.
 
 ## Документация
 

@@ -6,65 +6,43 @@
 
 Первый lesson рассчитан на `Ravaged Remake v1.2` за Cortex с Cortex Bot Lab. Для воспроизводимой практики рекомендуется локальная 1v1. Runtime guard проверяет карту и Cortex commander, но не подтверждает режим матча или выбранную фабрику заранее.
 
-## Найти data directory
+## Требования
 
-Откройте BAR launcher и выберите **Open install directory**. В PowerShell задайте открытый каталог и убедитесь, что это именно BAR data directory:
+- Windows PowerShell 5.1 или PowerShell 7+ для install/uninstall scripts.
+- Node.js с npm и Lua 5.1, доступный как команда `lua`, для локальной проверки репозитория.
 
-```powershell
-$BarDataDir = 'PATH_OPENED_BY_BAR_LAUNCHER'
-```
-
-Следующие команды выполняются из корня clone этого репозитория.
+Откройте BAR launcher и выберите **Open install directory**. Это BAR data directory, который нужно передать в `-BarDataDir`. Следующие команды выполняются из корня clone репозитория.
 
 ## Установка или обновление
 
-Создайте каталоги:
+Запустите:
 
 ```powershell
-New-Item -ItemType Directory -Force -Path (Join-Path $BarDataDir 'LuaUI/Widgets')
-New-Item -ItemType Directory -Force -Path (Join-Path $BarDataDir 'LuaUI/Include/bar_learning_coach')
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File ".\scripts\install.ps1" `
+  -BarDataDir "C:\path\to\Beyond-All-Reason"
 ```
 
-Если раньше был установлен debug-entrypoint, сначала удалите только его, чтобы BAR не загрузил две копии:
+Скрипт проверяет исходные production-файлы до изменения BAR data directory, создаёт необходимые каталоги, удаляет старый `bar_learning_coach_debug.lua` и копирует актуальный entrypoint с production helpers. Повторный запуск этой же команды обновляет установленную версию.
+
+Build-power, replay/research modules и tests не устанавливаются. Единый список файлов, которыми управляют install/uninstall scripts, хранится в `scripts/production-files.psd1`.
+
+## Проверка репозитория
+
+Основная локальная команда:
 
 ```powershell
-Remove-Item -LiteralPath (Join-Path $BarDataDir 'LuaUI/Widgets/bar_learning_coach_debug.lua') -ErrorAction SilentlyContinue
+npm run check
 ```
 
-Скопируйте новый entrypoint:
+Она запускает существующий standalone suite через `lua tests/run.lua`. На Windows, если политика выполнения блокирует `npm.ps1`, используйте эквивалентную команду `npm.cmd run check`.
 
-```powershell
-Copy-Item -LiteralPath 'LuaUI/Widgets/bar_learning_coach.lua' -Destination (Join-Path $BarDataDir 'LuaUI/Widgets/bar_learning_coach.lua') -Force
-```
-
-Скопируйте девять production helpers:
-
-```powershell
-$HelperFiles = @(
-  'coach_presentation.lua',
-  'energy_stall.lua',
-  'energy_stall_recommendation.lua',
-  'history_buffer.lua',
-  'opening_adapter.lua',
-  'opening_context.lua',
-  'opening_progress.lua',
-  'opening_tracker.lua',
-  'snapshot_collector.lua'
-)
-
-foreach ($FileName in $HelperFiles) {
-  Copy-Item -LiteralPath (Join-Path 'LuaUI/Include/bar_learning_coach' $FileName) -Destination (Join-Path $BarDataDir 'LuaUI/Include/bar_learning_coach') -Force
-}
-```
-
-Не копируйте `tests/`, research/runtime files, replay collector и build-power modules: production widget их не загружает.
-
-## Включение и проверка
+## Включение и проверка в BAR
 
 1. Запустите локальную practice с разрешёнными user widgets.
 2. Откройте Widget Selector клавишей `F11`.
 3. Найдите **BAR Learning Coach** и включите его.
-4. Если файлы копировались при запущенном BAR, перезагрузите LuaUI или матч.
+4. Если установка выполнялась при запущенном BAR, перезагрузите LuaUI или матч.
 
 В поддерживаемом контексте должна появиться одна milestone-card. При подтверждённом energy stall она временно сменяется recovery-card; после завершения lesson показывается итог. На другой карте или faction показывается нейтральный unsupported status. Проверяйте `infolog.txt` на первое сообщение `[BAR Learning Coach]` и ошибки `VFS.Include`.
 
@@ -72,19 +50,25 @@ foreach ($FileName in $HelperFiles) {
 
 ## Удаление
 
-Отключите widget, повторно проверьте `$BarDataDir`, затем удалите только проектные файлы:
+Отключите widget и запустите:
 
 ```powershell
-Remove-Item -LiteralPath (Join-Path $BarDataDir 'LuaUI/Widgets/bar_learning_coach.lua')
-Remove-Item -LiteralPath (Join-Path $BarDataDir 'LuaUI/Include/bar_learning_coach') -Recurse
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File ".\scripts\uninstall.ps1" `
+  -BarDataDir "C:\path\to\Beyond-All-Reason"
 ```
 
-Не удаляйте общий `LuaUI/Include`, общий BAR widget config или другие custom widgets.
+Скрипт удаляет только управляемые файлы BAR Learning Coach и старый debug-entrypoint. Общий `LuaUI/Include`, другие custom widgets и неизвестные файлы в project helper directory остаются на месте. Повторное удаление безопасно и сообщает об уже отсутствующих файлах.
+
+## Ручной fallback
+
+Если запуск PowerShell-скрипта невозможен, повторите его минимальные действия вручную: скопируйте `LuaUI/Widgets/bar_learning_coach.lua` в BAR `LuaUI/Widgets`, затем скопируйте helpers из списка `scripts/production-files.psd1` в BAR `LuaUI/Include/bar_learning_coach`. Удалите старый `bar_learning_coach_debug.lua`, чтобы BAR не загрузил две копии.
 
 ## Troubleshooting
 
+- Неверный `-BarDataDir`: передайте существующий каталог, открытый BAR launcher, а не каталог clone репозитория.
 - Widget отсутствует: проверьте разрешение user widgets, прямое размещение entrypoint в `LuaUI/Widgets` и отсутствие лишней вложенности `LuaUI/LuaUI`.
-- Missing include: все девять helpers должны лежать в `LuaUI/Include/bar_learning_coach`.
-- Загружаются две копии: удалите старый `bar_learning_coach_debug.lua`, оставив `bar_learning_coach.lua`.
+- Missing include: повторно запустите install-скрипт и проверьте, что он завершился без ошибки.
+- Загружаются две копии: повторно запустите install-скрипт; он удаляет старый `bar_learning_coach_debug.lua`.
 - Подсказка временно недоступна: widget не смог подтвердить необходимые данные и намеренно не выдаёт gameplay-совет.
 - Lesson неподдерживаемый: сверьте карту и Cortex faction; режим local 1v1 и Bot Lab — рекомендуемый сценарий, а не отдельный preflight check.
