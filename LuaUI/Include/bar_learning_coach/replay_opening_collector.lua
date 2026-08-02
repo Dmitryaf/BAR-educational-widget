@@ -133,6 +133,11 @@ function ReplayOpeningCollector:collect(gameTime, gameFrame)
 		finishedCountsByName = {},
 		commanderNames = {},
 		unknownUnitCount = 0,
+		startPosition = {
+			known = false,
+			x = nil,
+			z = nil,
+		},
 		api = {
 			getTeamResources = type(self.spring.GetTeamResources) == "function",
 			getTeamUnits = type(self.spring.GetTeamUnits) == "function",
@@ -140,6 +145,7 @@ function ReplayOpeningCollector:collect(gameTime, gameFrame)
 			getUnitIsBeingBuilt = type(self.spring.GetUnitIsBeingBuilt) == "function",
 			getUnitPosition = type(self.spring.GetUnitPosition) == "function",
 			getUnitWorkerTask = type(self.spring.GetUnitWorkerTask) == "function",
+			getTeamStartPosition = type(self.spring.GetTeamStartPosition) == "function",
 			unitDefs = type(self.unitDefs) == "table",
 		},
 	}
@@ -153,6 +159,15 @@ function ReplayOpeningCollector:collect(gameTime, gameFrame)
 		metal = readResource(self.spring, self.targetTeamID, "metal"),
 		energy = readResource(self.spring, self.targetTeamID, "energy"),
 	}
+	local startOk, startX, _, startZ, startValid = safeCall(
+		self.spring.GetTeamStartPosition,
+		self.targetTeamID
+	)
+	if startOk and startValid == true and finiteNumber(startX) and finiteNumber(startZ) then
+		snapshot.startPosition.known = true
+		snapshot.startPosition.x = startX
+		snapshot.startPosition.z = startZ
+	end
 
 	local unitsOk, unitIDs = safeCall(self.spring.GetTeamUnits, self.targetTeamID)
 	if not unitsOk or type(unitIDs) ~= "table" then

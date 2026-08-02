@@ -58,6 +58,9 @@ dofile("tests/coach_presentation_spec.lua")
 dofile("tests/opening_adapter_spec.lua")
 dofile("tests/opening_tracker_spec.lua")
 dofile("tests/replay_opening_collector_spec.lua")
+dofile("tests/replay_observation_spec.lua")
+dofile("tests/replay_analysis_spec.lua")
+dofile("tests/replay_widget_contract_spec.lua")
 
 print(string.format("%d successes / %d failures", successes, failures))
 if failures > 0 then

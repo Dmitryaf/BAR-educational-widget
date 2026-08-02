@@ -49,6 +49,10 @@ describe("replay opening collector", function()
 			GetUnitWorkerTask = function()
 				return -3, 99
 			end,
+			GetTeamStartPosition = function(teamID)
+				assert.are.equal(4, teamID)
+				return 100, 0, 200, true
+			end,
 		}
 
 		local snapshot = ReplayOpeningCollector.new(spring, unitDefs, 4):collect(120, 3600)
@@ -66,6 +70,9 @@ describe("replay opening collector", function()
 		assert.are.equal(200, snapshot.resources.energy.current)
 		assert.are.equal(-3, snapshot.units[3].taskCommandID)
 		assert.are.equal(99, snapshot.units[3].taskTargetID)
+		assert.are.equal(true, snapshot.startPosition.known)
+		assert.are.equal(100, snapshot.startPosition.x)
+		assert.are.equal(200, snapshot.startPosition.z)
 	end)
 
 	it("preserves unknown unit definitions without turning them into zero counts", function()
