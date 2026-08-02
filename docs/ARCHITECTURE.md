@@ -1,45 +1,61 @@
 # Архитектура
 
-## Поток данных
+## Основной replay-поток
 
 ```text
-BAR/Recoil API и widget call-ins
-→ adapters и normalized observations
-→ temporal tracker и domain evaluation
-→ pure coach presentation
-→ одна пользовательская карточка
+BAR/Recoil replay observations
+→ normalized telemetry выбранного team
+→ подтверждённые episodes
+→ детерминированный ranking
+→ coaching report с одной training task
 ```
 
-Domain и presentation-модули не обращаются к `Spring`, `VFS` или `gl`. Entry point связывает слои, обновляет состояние и рисует уже выбранную карточку. UI не определяет milestone и не конкурирует с recovery отдельной поверхностью.
+`bar_replay_coach.lua` является единственной BAR/UI-границей нового режима. Он проверяет `Spring.IsReplay()`, загружает явный `targetTeamID`, безопасно читает API и рисует готовую presentation-модель. Domain-модули не обращаются к `Spring`, `VFS`, `gl` или widget call-ins.
 
-## Production-модули
+## Replay production-модули
 
 | Модуль | Ответственность |
 | --- | --- |
-| `snapshot_collector.lua` | Нормализует team-resource snapshot |
-| `history_buffer.lua`, `energy_stall.lua` | Хранят ограниченную историю и lifecycle `ENERGY_STALL` |
-| `energy_stall_recommendation.lua` | Формирует recovery-рекомендацию из подтверждённого состояния |
-| `opening_context.lua` | Задаёт exact lesson, milestones и provisional thresholds |
-| `opening_adapter.lua` | Преобразует BAR scan собственной team в opening observation |
-| `opening_tracker.lua` | Ведёт factory idle history и completion memory текущей timeline |
-| `opening_progress.lua` | Выбирает `milestone`, `recovery`, completion или безопасный status |
-| `coach_presentation.lua` | Чисто преобразует решение в одну карточку |
-| `bar_learning_coach.lua` | Интеграция, invalidation, polling и rendering |
+| `replay_opening_collector.lua` | Защищённо читает resources, units, factory task и start position только выбранного team |
+| `replay_context.lua` | Хранит exact context и provisional thresholds |
+| `replay_observation.lua` | Преобразует raw API evidence в normalized replay observation, сохраняя unknown |
+| `history_buffer.lua`, `energy_stall.lua` | Переиспользуемая временная история и подтверждённый energy-stall lifecycle |
+| `episode_aggregator.lua` | Объединяет соседние подтверждённые состояния, закрывает episodes и отбрасывает короткие кандидаты |
+| `replay_session.lua` | Владеет одним team/timeline, first factory/expansion memory, reset и завершением анализа |
+| `issue_ranker.lua` | Детерминированно выбирает ровно одну главную проблему |
+| `training_task_selector.lua` | Сопоставляет проблеме одну ограниченную тренировочную задачу |
+| `replay_report.lua` | Строит чистую report-модель и ограничения причинности |
+| `replay_report_presentation.lua` | Формирует строки для панели и локального лога |
+| `bar_replay_coach.lua` | Replay guard, target-team metadata, polling, команды report/hide/show и rendering |
 
-Build-power и replay collectors не входят в production dependency graph.
+## Team и replay boundary
 
-## Контекст и честная граница поддержки
+`Spring.GetMyTeamID()` не используется для выбора анализируемого игрока. Team задаётся в локальном `LuaUI/Config/bar_replay_coach.lua`, проверяется по `Spring.GetTeamList()` и отклоняется, если это Gaia или отсутствующий team. Имя берётся через защищённые `GetPlayerList`/`GetPlayerInfo`, с нейтральным fallback для AI или неизвестного имени.
 
-Runtime guard подтверждает точное имя карты `Ravaged Remake v1.2` и наличие собственного Cortex commander. Локальная 1v1 practice — рекомендуемая среда проверки, а Cortex Bot Lab — выбранный путь lesson; текущий adapter не проверяет их как отдельные условия до показа первого шага.
+Анализ запускается только когда `Spring.IsReplay()` явно возвращает `true`. Виджет не отдаёт игровые команды, не вызывает `Spring.GiveOrder*`, не меняет playback и не показывает live gameplay recommendation. Raw replay-файл не читается: источником является воспроизведение внутри BAR.
 
-Adapter читает только собственную team. Неполные внешние данные сохраняются как unknown и приводят к временно недоступной подсказке, а не к уверенному совету. Unsupported map или faction дают нейтральную карточку без gameplay-рекомендации.
+## Episodes и timeline
 
-## State и обновление
+- `energy_stall` переиспользует hysteresis и candidate/recovery lifecycle существующего detector; в report попадает только подтверждённая достаточная длительность.
+- `factory_idle` относится только к первой наблюдённой завершённой Bot Lab; unknown task state и уничтожение фабрики не продолжают idle episode.
+- `late_expansion` использует существующее определение законченного mex за радиусом `900` и отдельное context control window.
 
-Ресурсы обновляются раз в `0.5` секунды, полный opening scan — не чаще раза в `2` секунды. Изменение energy state и factory lifecycle call-ins помечают opening как dirty. Tracker сбрасывает temporal confidence при смене team/context, rewind, unknown factory activity и явной invalidation; достигнутые milestones запоминаются только в текущей timeline.
+Aggregator хранит только подтверждённые интервалы. Смена team или rewind очищает всю текущую analysis session, поэтому две временные линии не смешиваются. `GameOver` или явная команда завершает активные episodes и делает report неизменяемым для этой session.
 
-Презентация имеет взаимоисключающие состояния: milestone, recovery, lesson complete, unsupported setup, temporarily unavailable или none. После lesson complete recovery больше не показывается.
+Ranking сначала учитывает подтверждённую последовательность energy stall → factory idle в ограниченном окне, затем общую длительность, повторяемость, положение по времени и стабильный type tie-break. Это узкое детерминированное правило, а не универсальная оценка качества игры.
+
+## Вторичная opening-ветка
+
+Существующий `bar_learning_coach.lua` и его opening/recovery domain остаются отдельной production-веткой:
+
+```text
+own-team live observations
+→ opening/recovery decision
+→ одна practice-card
+```
+
+Replay Coach не импортирует opening progress/presentation и не расширяет live-рекомендации. Общими остаются только проверенные низкоуровневые временные и API-подходы.
 
 ## Проверка
 
-Чистые Lua-specs проверяют adapters, domain state и presenter отдельно от BAR. Runtime-проверка нужна для совместимости с конкретной версией BAR/Recoil, но сама по себе не доказывает продуктовую полезность.
+Standalone Lua specs проверяют normalized evidence, три episode type, короткие колебания, neutral/unsupported results, team change, rewind, active-episode close, ranking, training task и report presentation. Recoil runtime всё равно нужен отдельно: unit tests не подтверждают фактическую видимость выбранного team, factory task semantics, widget call-ins или layout в конкретной версии BAR.
