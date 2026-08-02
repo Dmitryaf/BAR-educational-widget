@@ -5,6 +5,8 @@
   "license": "GPL-2.0-or-later",
   "description": "Personal educational LuaUI widget for Beyond All Reason.",
   "scripts": {
+    "test": "lua tests/run.lua",
+    "check": "npm run test",
     "prepare": "husky",
     "commitlint": "commitlint"
   },
