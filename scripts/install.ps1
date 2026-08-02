@@ -24,9 +24,12 @@ if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
 }
 $productionFiles = Import-PowerShellDataFile -LiteralPath $manifestPath
 
-$sourceWidget = Join-Path $repositoryRoot (Join-Path 'LuaUI\Widgets' $productionFiles.EntryPoint)
+$sourceWidgets = @()
+foreach ($entryPointName in $productionFiles.EntryPoints) {
+    $sourceWidgets += Join-Path $repositoryRoot (Join-Path 'LuaUI\Widgets' $entryPointName)
+}
 $sourceHelperRoot = Join-Path $repositoryRoot 'LuaUI\Include\bar_learning_coach'
-$requiredSources = @($sourceWidget)
+$requiredSources = @($sourceWidgets)
 foreach ($helperName in $productionFiles.Helpers) {
     $requiredSources += Join-Path $sourceHelperRoot $helperName
 }
@@ -50,16 +53,19 @@ foreach ($legacyName in $productionFiles.LegacyEntryPoints) {
     }
 }
 
-$destinationWidget = Join-Path $widgetDirectory $productionFiles.EntryPoint
-Copy-Item -LiteralPath $sourceWidget -Destination $destinationWidget -Force
+for ($index = 0; $index -lt $productionFiles.EntryPoints.Count; $index++) {
+    $entryPointName = $productionFiles.EntryPoints[$index]
+    Copy-Item -LiteralPath $sourceWidgets[$index] `
+        -Destination (Join-Path $widgetDirectory $entryPointName) -Force
+}
 foreach ($helperName in $productionFiles.Helpers) {
     Copy-Item -LiteralPath (Join-Path $sourceHelperRoot $helperName) `
         -Destination (Join-Path $helperDirectory $helperName) -Force
 }
 
-Write-Host 'BAR Learning Coach installed or updated.'
+Write-Host 'BAR Replay Coach and Opening Practice installed or updated.'
 Write-Host "  BAR data directory: $($barDataItem.FullName)"
-Write-Host "  Entrypoint copied: $($productionFiles.EntryPoint)"
+Write-Host "  Entrypoints copied: $($productionFiles.EntryPoints -join ', ')"
 Write-Host "  Production helpers copied: $($productionFiles.Helpers.Count)"
 if ($removedLegacy.Count -gt 0) {
     Write-Host "  Legacy entrypoints removed: $($removedLegacy -join ', ')"

@@ -1,21 +1,19 @@
-# Установка BAR Learning Coach
+# Установка BAR Replay Coach
 
-Инструкция устанавливает только production widget и его зависимости. Виджет предназначен для custom/user widgets и по умолчанию выключен.
+Install-скрипт устанавливает два выключенных по умолчанию production widgets:
 
-## Поддерживаемый lesson
-
-Первый lesson рассчитан на `Ravaged Remake v1.2` за Cortex с Cortex Bot Lab. Для воспроизводимой практики рекомендуется локальная 1v1. Runtime guard проверяет карту и Cortex commander, но не подтверждает режим матча или выбранную фабрику заранее.
+- **BAR Replay Coach** — основной replay-analysis режим;
+- **BAR Learning Coach** — отдельный экспериментальный opening practice.
 
 ## Требования
 
 - Windows PowerShell 5.1 или PowerShell 7+ для install/uninstall scripts.
 - Node.js с npm и Lua 5.1, доступный как команда `lua`, для локальной проверки репозитория.
+- Replay в узком context: `Ravaged Remake v1.2`, Cortex, Cortex Bot Lab.
 
 Откройте BAR launcher и выберите **Open install directory**. Это BAR data directory, который нужно передать в `-BarDataDir`. Следующие команды выполняются из корня clone репозитория.
 
 ## Установка или обновление
-
-Запустите:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
@@ -23,34 +21,43 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -BarDataDir "C:\path\to\Beyond-All-Reason"
 ```
 
-Скрипт проверяет исходные production-файлы до изменения BAR data directory, создаёт необходимые каталоги, удаляет старый `bar_learning_coach_debug.lua` и копирует актуальный entrypoint с production helpers. Повторный запуск этой же команды обновляет установленную версию.
+Повторный запуск обновляет оба entrypoints и production helpers. Tests, build-power modules и replay research harnesses не устанавливаются. Единый allowlist хранится в `scripts/production-files.psd1`.
 
-Build-power, replay/research modules и tests не устанавливаются. Единый список файлов, которыми управляют install/uninstall scripts, хранится в `scripts/production-files.psd1`.
+## Выбор team для replay
+
+Создайте в BAR data directory файл `LuaUI/Config/bar_replay_coach.lua`:
+
+```lua
+return {
+    targetTeamID = 0,
+}
+```
+
+Замените `0` на engine team ID анализируемого игрока. Если config отсутствует или team неверен, панель показывает доступные пары `teamID=player`. После изменения config перезагрузите LuaUI или replay. Выбор сохраняется внутри одной analysis session; смена team начинает новую session без старых episodes.
+
+## Запуск Replay Coach
+
+1. Откройте replay в BAR.
+2. Через Widget Selector (`F11`) включите **BAR Replay Coach**.
+3. Проверьте в панели выбранный team и статус `supported`/`analyzing`.
+4. Досмотрите replay до конца или выполните `/luaui replaycoach report`.
+5. Используйте `/luaui replaycoach hide` и `/luaui replaycoach show`, чтобы скрыть или вернуть панель без остановки analysis session.
+
+Report остаётся в панели, кратко дублируется в `infolog.txt` и сохраняется через стандартный widget config mechanism. В обычном матче Replay Coach показывает нейтральный `unsupported_mode` и не собирает анализ.
+
+## Opening practice
+
+Для прежнего experiment включите **BAR Learning Coach**. Он работает только со своей live opening/recovery-card и не участвует в replay report. Подробности текущего lesson находятся в [opening-шпаргалке](OPENING_GUIDE.md).
 
 ## Проверка репозитория
-
-Основная локальная команда:
 
 ```powershell
 npm run check
 ```
 
-Она запускает существующий standalone suite через `lua tests/run.lua`. На Windows, если политика выполнения блокирует `npm.ps1`, используйте эквивалентную команду `npm.cmd run check`.
-
-## Включение и проверка в BAR
-
-1. Запустите локальную practice с разрешёнными user widgets.
-2. Откройте Widget Selector клавишей `F11`.
-3. Найдите **BAR Learning Coach** и включите его.
-4. Если установка выполнялась при запущенном BAR, перезагрузите LuaUI или матч.
-
-В поддерживаемом контексте должна появиться одна milestone-card. При подтверждённом energy stall она временно сменяется recovery-card; после завершения lesson показывается итог. На другой карте или faction показывается нейтральный unsupported status. Проверяйте `infolog.txt` на первое сообщение `[BAR Learning Coach]` и ошибки `VFS.Include`.
-
-Эта проверка подтверждает загрузку, но не пользовательскую полезность.
+Команда запускает standalone suite через `lua tests/run.lua`. Если Windows execution policy блокирует `npm.ps1`, используйте `npm.cmd run check`.
 
 ## Удаление
-
-Отключите widget и запустите:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
@@ -58,17 +65,17 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -BarDataDir "C:\path\to\Beyond-All-Reason"
 ```
 
-Скрипт удаляет только управляемые файлы BAR Learning Coach и старый debug-entrypoint. Общий `LuaUI/Include`, другие custom widgets и неизвестные файлы в project helper directory остаются на месте. Повторное удаление безопасно и сообщает об уже отсутствующих файлах.
+Скрипт удаляет только управляемые entrypoints/helpers и старый debug-entrypoint. Общий `LuaUI/Include`, другие custom widgets, неизвестные файлы и пользовательский `LuaUI/Config/bar_replay_coach.lua` сохраняются. Повторное удаление безопасно.
 
 ## Ручной fallback
 
-Если запуск PowerShell-скрипта невозможен, повторите его минимальные действия вручную: скопируйте `LuaUI/Widgets/bar_learning_coach.lua` в BAR `LuaUI/Widgets`, затем скопируйте helpers из списка `scripts/production-files.psd1` в BAR `LuaUI/Include/bar_learning_coach`. Удалите старый `bar_learning_coach_debug.lua`, чтобы BAR не загрузил две копии.
+Если скрипт запустить невозможно, скопируйте entrypoints и helpers из `scripts/production-files.psd1` в соответствующие BAR `LuaUI/Widgets` и `LuaUI/Include/bar_learning_coach`. Production manifest является единственным списком файлов; research/build-power modules вручную не копируйте.
 
 ## Troubleshooting
 
-- Неверный `-BarDataDir`: передайте существующий каталог, открытый BAR launcher, а не каталог clone репозитория.
-- Widget отсутствует: проверьте разрешение user widgets, прямое размещение entrypoint в `LuaUI/Widgets` и отсутствие лишней вложенности `LuaUI/LuaUI`.
-- Missing include: повторно запустите install-скрипт и проверьте, что он завершился без ошибки.
-- Загружаются две копии: повторно запустите install-скрипт; он удаляет старый `bar_learning_coach_debug.lua`.
-- Подсказка временно недоступна: widget не смог подтвердить необходимые данные и намеренно не выдаёт gameplay-совет.
-- Lesson неподдерживаемый: сверьте карту и Cortex faction; режим local 1v1 и Bot Lab — рекомендуемый сценарий, а не отдельный preflight check.
+- `unsupported_mode`: открыт обычный матч, а не replay.
+- `team_not_selected`: создайте config и выберите team из списка панели.
+- `team_unavailable`: указан отсутствующий team или Gaia.
+- `unsupported`: карта или faction не входят в первый context.
+- `temporarily_unavailable`: нужные API-данные неизвестны; Coach намеренно не превращает это в проблему игрока.
+- Report не появился автоматически: выполните `/luaui replaycoach report` до закрытия replay.

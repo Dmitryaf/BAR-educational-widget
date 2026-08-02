@@ -26,7 +26,9 @@ $widgetDirectory = Join-Path $barDataItem.FullName 'LuaUI\Widgets'
 $helperDirectory = Join-Path $barDataItem.FullName 'LuaUI\Include\bar_learning_coach'
 
 $ownedFiles = @()
-$ownedFiles += Join-Path $widgetDirectory $productionFiles.EntryPoint
+foreach ($entryPointName in $productionFiles.EntryPoints) {
+    $ownedFiles += Join-Path $widgetDirectory $entryPointName
+}
 foreach ($legacyName in $productionFiles.LegacyEntryPoints) {
     $ownedFiles += Join-Path $widgetDirectory $legacyName
 }
@@ -34,7 +36,7 @@ foreach ($helperName in $productionFiles.Helpers) {
     $ownedFiles += Join-Path $helperDirectory $helperName
 }
 
-Write-Host 'Removing BAR Learning Coach files:'
+Write-Host 'Removing BAR Replay Coach and Opening Practice files:'
 foreach ($ownedPath in $ownedFiles) {
     if (Test-Path -LiteralPath $ownedPath -PathType Leaf) {
         Remove-Item -LiteralPath $ownedPath -Force
@@ -54,4 +56,4 @@ if (Test-Path -LiteralPath $helperDirectory -PathType Container) {
     }
 }
 
-Write-Host 'BAR Learning Coach uninstall complete.'
+Write-Host 'BAR coaches uninstall complete.'
