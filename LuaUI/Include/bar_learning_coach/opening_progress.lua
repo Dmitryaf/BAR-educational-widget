@@ -97,9 +97,9 @@ local function evaluateProduction(context, finishedCounts)
 		return result("production_cycle", "unknown", "combatBots count missing")
 	end
 	if constructors > 0 or combatBots > 0 then
-		return result("production_cycle", "in_progress")
+		return result("production_cycle", "in_progress", "constructor or initial combat bots incomplete")
 	end
-	return result("production_cycle", "not_started")
+	return result("production_cycle", "not_started", "constructor and initial combat bots missing")
 end
 
 local function allComplete(results, lastIndex)
@@ -202,19 +202,16 @@ local function validContext(context)
 	return #context.milestones > 0
 end
 
-local function applyCompletionMemory(milestones, completionMemory)
+local function applyCompletionMemory(milestone, completionMemory)
 	if type(completionMemory) ~= "table" then
 		return
 	end
 
-	for i = 1, #milestones do
-		local milestone = milestones[i]
-		if completionMemory[milestone.id] == true and milestone.state ~= "complete" then
-			milestone.observedState = milestone.state
-			milestone.observedReason = milestone.reason
-			milestone.state = "complete"
-			milestone.reason = "completed earlier"
-		end
+	if completionMemory[milestone.id] == true and milestone.state ~= "complete" then
+		milestone.observedState = milestone.state
+		milestone.observedReason = milestone.reason
+		milestone.state = "complete"
+		milestone.reason = "completed earlier"
 	end
 end
 
@@ -269,8 +266,8 @@ function OpeningProgress.evaluate(context, observation, completionMemory)
 		else
 			milestones[i] = result(milestoneId, "unknown", "milestone evaluator missing")
 		end
+		applyCompletionMemory(milestones[i], completionMemory)
 	end
-	applyCompletionMemory(milestones, completionMemory)
 
 	local nextMilestoneIndex = nil
 	for i = 1, #milestones do

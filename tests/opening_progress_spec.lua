@@ -235,6 +235,67 @@ describe("opening progress", function()
 		assert.are.equal("bot_lab", evaluated.nextMilestoneId)
 	end)
 
+	it("evaluates the final milestone from remembered effective earlier states", function()
+		local counts = readyCounts()
+		counts.corck = 0
+		local evaluated = OpeningProgress.evaluate(context, observation({
+			finishedCounts = counts,
+			factory = { active = true, idleDuration = nil },
+		}), {
+			base_income = true,
+			bot_lab = true,
+			production_cycle = true,
+			first_expansion = true,
+		})
+
+		assert.are.equal("complete", evaluated.lessonState)
+		assert.is_nil(evaluated.nextMilestoneId)
+		assert.are.equal("lesson_complete", evaluated.presentation)
+		assert.are.equal("complete", evaluated.milestones[3].state)
+		assert.are.equal("in_progress", evaluated.milestones[3].observedState)
+		assert.are.equal(
+			"constructor or initial combat bots incomplete",
+			evaluated.milestones[3].observedReason
+		)
+		assert.are.equal("complete", evaluated.milestones[5].state)
+	end)
+
+	it("does not complete the final milestone from earlier memory while the factory is idle too long", function()
+		local counts = readyCounts()
+		counts.corck = 0
+		local evaluated = OpeningProgress.evaluate(context, observation({
+			finishedCounts = counts,
+		}), {
+			base_income = true,
+			bot_lab = true,
+			production_cycle = true,
+			first_expansion = true,
+		})
+
+		assert.are.equal("in_progress", evaluated.lessonState)
+		assert.are.equal("t1_loop", evaluated.nextMilestoneId)
+		assert.are.equal("in_progress", evaluated.milestones[5].state)
+	end)
+
+	it("does not complete the final milestone from earlier memory without enough combat bots", function()
+		local counts = readyCounts()
+		counts.corck = 0
+		counts.combatBots = context.thresholds.stableCombatBots - 1
+		local evaluated = OpeningProgress.evaluate(context, observation({
+			finishedCounts = counts,
+			factory = { active = true, idleDuration = nil },
+		}), {
+			base_income = true,
+			bot_lab = true,
+			production_cycle = true,
+			first_expansion = true,
+		})
+
+		assert.are.equal("in_progress", evaluated.lessonState)
+		assert.are.equal("t1_loop", evaluated.nextMilestoneId)
+		assert.are.equal("in_progress", evaluated.milestones[5].state)
+	end)
+
 	it("does not infer completion from absent or false memory", function()
 		local value = observation()
 		local evaluated = OpeningProgress.evaluate(context, value, {
